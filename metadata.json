@@ -1,0 +1,5 @@
+{
+  "name": "UA Parent Forum AI Assistant",
+  "description": "A multi-page web application for the University of Alabama (UA) Parent Forum. Parents can submit questions and browse a public forum. Features AI-powered answers grounded in official university information, question upvoting, and commenting.",
+  "requestFramePermissions": []
+}
