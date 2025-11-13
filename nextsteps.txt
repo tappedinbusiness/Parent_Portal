@@ -1,0 +1,41 @@
+*** NEXT STEPS ***
+
+This project currently is a react scaffolding for the end-goal parent portal website. The functionality we have now that is desired:
+- forum based homepage
+- ability to ask questions
+- AI integration to give quick response
+- respond to other questions on homepage
+- post question to forum for others to see / respond to
+
+
+Features to ADD:
+- user authentication (AWS Cognito)
+- profile creation / editing
+
+Services:
+currently we have a scaffolding built out for gemini, and firebase. We want to get rid of these, and switch to using AWS services entirely.
+With gemini, we want to keep similar functionality but transition to using the openAI API base.
+
+Plan:
+- Remove unnecessary files for services we aren't using (gemini, firebase, etc)
+- Implement AWS SDK into project (typescript)
+- Create custom domain for web app (squarespace)
+- In AWS Cognito portal, setup ACM certificate to be used for project using custom domain
+- User pool, app client, and google federated IP already setup
+- Setup facebook federated IP
+- Integrate AWS Cognito into project (use HostedUI login page)
+- Use JWTs to check if user is logged in, and preserve logged in state
+
+AFTER Testing and Verifying Cognito is FULLY functional...
+... if user does not have account, use lambda to automatically create account in dynamoDB users table (already created)
+... redirect to create profile page, use lambda functions to update profile
+... otherwise if user does have account setup, redirect to homepage
+
+Important Factors:
+- We want to execute each part of the plan step-by-step, outlining everything that needs to be done and where it needs to be setup from.
+- Before any code is written, we want to ensure the previous step is setup correctly and the necessary info is present.
+- When writing code, go FILE by FILE. We want to write one file at a time, build the project, ensure we have no errors, then move onto the next file.
+- Ensure comprehensive comments / documentation is written throughout each file, along with console logging for debugging purposes.
+- Before moving onto a next step / file, ensure all necessary testing is complete and the project builds correctly. DO NOT PROCEED WITHOUT VERIFYING FUNCTIONALITY
+
+- Keep module imports / exports standard across the entire file. USE THE SAME MODULE IMPORT / EXPORT FORMAT ACROSS THE APP.
