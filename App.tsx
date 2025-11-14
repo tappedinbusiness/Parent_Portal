@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getAIAnswer, checkForDuplicate, correctSpelling, moderateDiscussionTopic } from './services/geminiService';
+//import { getAIAnswer, checkForDuplicate, correctSpelling, moderateDiscussionTopic } from './services/geminiService';
+import { getAIAnswer, checkForDuplicate, correctSpelling, moderateDiscussionTopic } from './services/openaiService';
 import type { Question, StudentYear, Comment } from './types';
 import Header from './components/Header';
 import QuestionForm from './components/QuestionForm';

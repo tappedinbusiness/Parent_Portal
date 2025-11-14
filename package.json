@@ -9,12 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "marked": "latest",
+    "openai": "^6.9.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@google/genai": "^1.27.0",
-    "uuid": "^13.0.0",
-    "marked": "latest",
-    "firebase": "^12.4.0"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
