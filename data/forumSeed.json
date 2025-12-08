@@ -1,0 +1,52 @@
+[
+  {
+    "id": "disc-1",
+    "userId": "parent_1",
+    "type": "discussion",
+    "questionText": "What are typical study group sizes for freshman courses?",
+    "timestamp": "2025-12-01T10:30:00.000Z",
+    "upvotes": 3,
+    "comments": [
+      { "id": "d1c1", "text": "I usually join groups of 3-5 — it's easier to coordinate.", "timestamp": "2025-12-01T11:00:00.000Z", "upvotes": 2 },
+      { "id": "d1c2", "text": "For lab work, slightly larger groups worked well for my child.", "timestamp": "2025-12-01T12:00:00.000Z", "upvotes": 1 }
+    ],
+    "studentYear": "Freshman"
+  },
+  {
+    "id": "disc-2",
+    "userId": "parent_2",
+    "type": "discussion",
+    "questionText": "How do parents typically arrange campus visits?",
+    "timestamp": "2025-11-20T09:00:00.000Z",
+    "upvotes": 2,
+    "comments": [
+      { "id": "d2c1", "text": "Contact admissions to schedule a guided tour — they handle group visits.", "timestamp": "2025-11-20T09:30:00.000Z", "upvotes": 1 },
+      { "id": "d2c2", "text": "Weekend visits are best if you want access to activities and dining halls.", "timestamp": "2025-11-21T10:00:00.000Z", "upvotes": 0 }
+    ],
+    "studentYear": "Incoming/Prospective"
+  },
+  {
+    "id": "ai-1",
+    "userId": "anonymous",
+    "type": "ai",
+    "questionText": "When is the deadline for spring tuition payment?",
+    "aiAnswer": "The deadline for spring tuition payment is March 1. Source: University bursar policies. [Bursar](https://example.edu/bursar).",
+    "status": "answered",
+    "timestamp": "2025-12-05T14:00:00.000Z",
+    "upvotes": 10,
+    "comments": []
+  },
+  {
+    "id": "ai-2",
+    "userId": "anonymous",
+    "type": "ai",
+    "questionText": "Can parents request official transcripts for their student?",
+    "aiAnswer": "Parents cannot request a student's transcript without written consent from the student. See University registrar policy.",
+    "status": "answered",
+    "timestamp": "2025-12-04T09:00:00.000Z",
+    "upvotes": 5,
+    "comments": [
+      { "id": "a2c1", "text": "Good to know — thanks!", "timestamp": "2025-12-04T10:00:00.000Z", "upvotes": 1 }
+    ]
+  }
+]
