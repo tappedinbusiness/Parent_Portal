@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { Question, QuestionStatus, Comment, StudentYear, QuestionType } from '../types';
 import { marked } from 'marked';
+import alabamaLogo from '../assets/Alabama_Crimson_Tide_logo.svg.png';
+import groupIcon from '../assets/group-of-people-svgrepo-com.svg';
+import fbLikeIcon from '../assets/facebook-like-svgrepo-com.svg';
 
 // Configure marked library for secure and consistent rendering
 marked.setOptions({
   gfm: true, // Enable GitHub Flavored Markdown
   breaks: true, // Interpret carriage returns as <br> tags
-  mangle: false, // Disable obfuscating email addresses
-  headerIds: false, // Disable automatic header ID generation
+  //mangle: false, // Disable obfuscating email addresses
+  //headerIds: false, // Disable automatic header ID generation
 });
 
 const StatusBadge: React.FC<{ status?: QuestionStatus }> = ({ status }) => {
@@ -84,7 +87,7 @@ const CommentForm: React.FC<{ onAddComment: (text: string) => void }> = ({ onAdd
     );
 };
 
-const ForumItem: React.FC<{ question: Question; onUpvote: (id: string) => void; onAddComment: (id: string, text: string) => void; }> = ({ question, onUpvote, onAddComment }) => {
+const ForumItem: React.FC<{ question: Question; onToggleLike: (id: string) => void; likedIds?: string[]; onAddComment: (id: string, text: string) => void; likedCommentIds?: string[]; onToggleCommentLike?: (commentId: string, questionId: string) => void; }> = ({ question, onToggleLike, likedIds = [], onAddComment, likedCommentIds = [], onToggleCommentLike }) => {
   const formattedDate = question.timestamp
     ? new Date(question.timestamp).toLocaleString()
     : 'Just now';
@@ -93,24 +96,63 @@ const ForumItem: React.FC<{ question: Question; onUpvote: (id: string) => void; 
   const htmlAnswer = question.aiAnswer ? marked(question.aiAnswer) : '';
   const isDiscussion = question.type === 'discussion';
 
+  // Sort comments by upvotes (desc), then by recency (timestamp desc) for display
+  const sortedComments = [...question.comments].sort((a, b) => {
+    const upA = a.upvotes ?? 0;
+    const upB = b.upvotes ?? 0;
+    if (upB !== upA) return upB - upA;
+    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+  });
+
   return (
-    <article className="bg-white p-5 rounded-lg shadow-md border border-gray-200">
-      <div className="flex items-center justify-between mb-3 text-gray-500">
-        <div className="flex items-center flex-wrap">
-            <TypeBadge type={question.type} />
-            <StatusBadge status={question.status} />
-            <StudentYearBadge year={question.studentYear} />
+    <article className="relative bg-white p-6 rounded-lg shadow-md border border-gray-200">
+      {/* Discussion badge in top-right for discussion posts */}
+      {isDiscussion && (
+        <div className="absolute top-12 right-3">
+          <div className="group relative inline-block">
+            <img src={groupIcon} alt="Start a discussion" className="w-10 h-10 object-contain rounded" />
+
+            <div
+              role="tooltip"
+              className="pointer-events-none absolute right-full top-0 transform translate-x-0 -translate-y-1/4 md:-translate-x-3 md:translate-y-0 w-64 md:w-72 bg-white border border-red-200 text-sm md:text-base text-gray-800 rounded-md p-3 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
+            >
+              <div className="font-semibold text-red-800 mb-1">Discussions</div>
+              <div>Share opinions, experiences, and stories with other parents and students.</div>
+              {/* Tooltip arrow */}
+              <div className="absolute -right-3 top-4 w-3 h-3 bg-white border-t border-l border-red-200 transform rotate-45"></div>
+            </div>
+          </div>
         </div>
-        <span className="text-sm flex-shrink-0 ml-2">{formattedDate}</span>
-      </div>
-      
+      )}
+
       <div className="mb-4">
         <p className="font-semibold text-gray-600">{isDiscussion ? 'Topic:' : 'Q:'}</p>
-        <p className="ml-4 text-lg text-gray-900">{question.questionText}</p>
+        <p className="ml-4 p-2 text-lg text-gray-900">{question.questionText}</p>
       </div>
 
       {!isDiscussion && question.aiAnswer && (
-        <div className="p-4 bg-red-50 border-l-4 border-red-700 rounded-r-lg">
+        <div className="relative p-4 pr-16 bg-red-50 border-l-4 border-red-700 rounded-r-lg">
+          {/* University endorsement badge in the corner with styled hover tooltip */}
+          <div className="absolute top-3 right-3">
+            <div className="group relative inline-block">
+              <img
+                src={alabamaLogo}
+                alt="University-backed answer"
+                className="w-12 h-12 object-contain rounded"
+              />
+
+              <div
+                role="tooltip"
+                className="pointer-events-none absolute right-full top-0 transform translate-x-0 -translate-y-1/4 md:-translate-x-3 md:translate-y-0 w-64 md:w-72 bg-white border border-red-200 text-sm md:text-base text-gray-800 rounded-md p-3 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
+              >
+                <div className="font-semibold text-red-800 mb-1">University-backed answer</div>
+                <div>Real answers backed by university rules, official sources, and documented policies.</div>
+                {/* Tooltip arrow */}
+                <div className="absolute -right-3 top-4 w-3 h-3 bg-white border-t border-l border-red-200 transform rotate-45"></div>
+              </div>
+            </div>
+          </div>
+
           <p className="font-semibold text-red-900">A: (UA AI Assistant)</p>
           <div 
             className="prose prose-sm max-w-none text-gray-800 ml-4 prose-a:text-blue-600 hover:prose-a:text-blue-800 hover:prose-a:underline"
@@ -120,23 +162,39 @@ const ForumItem: React.FC<{ question: Question; onUpvote: (id: string) => void; 
       )}
 
       <div className="mt-4 flex items-center justify-between border-t pt-3">
-        <button 
-            onClick={() => onUpvote(question.id)}
-            className="flex items-center space-x-2 text-sm text-gray-600 hover:text-red-800 font-medium transition-colors p-2 rounded-md hover:bg-gray-100"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-          <span>Upvote ({question.upvotes})</span>
-        </button>
+        <div className="flex items-center">
+          {/** Like button: toggles liked state and updates count via parent handler */}
+          <button
+            onClick={() => onToggleLike(question.id)}
+            aria-pressed={likedIds.includes(question.id)}
+            className={`flex items-center space-x-2 text-sm font-medium transition-colors p-2 rounded-md focus:outline-none ${likedIds.includes(question.id) ? 'text-green-700 bg-green-50' : 'text-gray-600 hover:text-red-800 hover:bg-gray-100'}`}
+          >
+            <img src={fbLikeIcon} alt="Like" className="w-5 h-5 object-contain" />
+            <span>{likedIds.includes(question.id) ? 'Liked' : 'Like'} ({question.upvotes})</span>
+          </button>
+        </div>
+
+        <span className="text-md text-gray-600 ml-4">Date Posted: {formattedDate}</span>
       </div>
       
       <div className="mt-4 border-t pt-4">
         <h4 className="text-md font-semibold text-gray-700 mb-3">Comments ({question.comments.length})</h4>
         <div className="space-y-4">
-            {question.comments.map(comment => (
-                <div key={comment.id} className="text-sm p-3 bg-gray-50 rounded-lg border">
-                    <p className="text-gray-800">{comment.text}</p>
-                    <p className="text-xs text-gray-400 mt-1 text-right">{new Date(comment.timestamp).toLocaleString()}</p>
-                </div>
+            {sortedComments.map(comment => (
+                 <div key={comment.id} className="text-sm p-3 bg-gray-50 rounded-lg border">
+                     <p className="text-gray-800">{comment.text}</p>
+                     <div className="flex items-center justify-between mt-2">
+                       <p className="text-xs text-gray-400">{new Date(comment.timestamp).toLocaleString()}</p>
+                       <button
+                         onClick={() => onToggleCommentLike?.(comment.id, question.id)}
+                         aria-pressed={likedCommentIds.includes(comment.id)}
+                         className={`ml-3 flex items-center space-x-2 text-xs font-medium transition-colors p-1 rounded ${likedCommentIds.includes(comment.id) ? 'text-green-700 bg-green-50' : 'text-gray-500 hover:text-green-700 hover:bg-gray-100'}`}
+                       >
+                         <img src={fbLikeIcon} alt="Like comment" className="w-4 h-4 object-contain" />
+                         <span>{comment.upvotes ?? 0}</span>
+                       </button>
+                     </div>
+                 </div>
             ))}
             {question.comments.length === 0 && (
                 <p className="text-sm text-gray-500">No comments yet.</p>

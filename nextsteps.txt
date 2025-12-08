@@ -12,14 +12,12 @@ Features to ADD:
 - user authentication (AWS Cognito)
 - profile creation / editing
 
-Services:
-currently we have a scaffolding built out for gemini, and firebase. We want to get rid of these, and switch to using AWS services entirely.
-With gemini, we want to keep similar functionality but transition to using the openAI API base.
-
 Plan:
-- Remove unnecessary files for services we aren't using (gemini, firebase, etc)
-- Implement AWS SDK into project (typescript)
-- Create custom domain for web app (squarespace)
+- Remove unnecessary files for services we aren't using (gemini, firebase, etc) - DONE
+- Create custom domain for web app (squarespace) - DONE (collegeask.org)
+- Implement OpenAI services for AI functionality - DONE
+
+- Implement AWS SDK into project (typescript) 
 - In AWS Cognito portal, setup ACM certificate to be used for project using custom domain
 - User pool, app client, and google federated IP already setup
 - Setup facebook federated IP
@@ -27,7 +25,7 @@ Plan:
 - Use JWTs to check if user is logged in, and preserve logged in state
 
 AFTER Testing and Verifying Cognito is FULLY functional...
-... if user does not have account, use lambda to automatically create account in dynamoDB users table (already created)
+... if user does not have account, use lambda to automatically create account in dynamoDB users table (already created table)
 ... redirect to create profile page, use lambda functions to update profile
 ... otherwise if user does have account setup, redirect to homepage
 

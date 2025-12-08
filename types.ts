@@ -8,6 +8,7 @@ export interface Comment {
     id: string;
     text: string;
     timestamp: Date;
+    upvotes: number;
 }
 
 export interface Question {

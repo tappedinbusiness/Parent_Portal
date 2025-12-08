@@ -10,16 +10,44 @@ import StudentYearSelect from './components/StudentYearSelect';
 import AdminConsole from './components/AdminConsole';
 import ForumFilter from './components/ForumFilter';
 import { v4 as uuidv4 } from 'uuid';
+import alabamaLogo from './assets/Alabama_Crimson_Tide_logo.svg.png';
+import groupIcon from './assets/group-of-people-svgrepo-com.svg';
 
 type Page = 'home' | 'forum' | 'admin';
 type ForumView = 'discussion' | 'ai';
 
 const App: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
+  // Load initial seed data on first mount if present
+  React.useEffect(() => {
+    const loadSeed = async () => {
+      try {
+        const res = await fetch('/data/forumSeed.json');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) return;
+        setQuestions(prev => {
+          // only load seed if there are no existing questions
+          if (prev.length > 0) return prev;
+          return data.map((q: any) => ({
+            ...q,
+            timestamp: new Date(q.timestamp),
+            comments: (q.comments || []).map((c: any) => ({ ...c, timestamp: new Date(c.timestamp), upvotes: c.upvotes ?? 0 }))
+          }));
+        });
+      } catch (err) {
+        console.warn('Failed to load seed data', err);
+      }
+    };
+    loadSeed();
+  }, []);
+
   const [page, setPage] = useState<Page>('home');
   const [studentYear, setStudentYear] = useState<StudentYear | 'All'>('All');
   const [pinnedQuestionIds, setPinnedQuestionIds] = useState<string[]>([]);
   const [forumViewFilter, setForumViewFilter] = useState<ForumView>('discussion');
+  const [likedQuestionIds, setLikedQuestionIds] = useState<string[]>([]);
+  const [likedCommentIds, setLikedCommentIds] = useState<string[]>([]);
 
 
   const handleAiQuestionSubmit = async (questionText: string): Promise<boolean> => {
@@ -105,11 +133,19 @@ const App: React.FC = () => {
   };
 
 
-  const handleUpvote = (questionId: string) => {
+  // Toggle like for a question: add/remove from liked list and update upvote count
+  const handleToggleLike = (questionId: string) => {
     setQuestions(prevQuestions =>
-      prevQuestions.map(q =>
-        q.id === questionId ? { ...q, upvotes: q.upvotes + 1 } : q
-      )
+      prevQuestions.map(q => {
+        if (q.id !== questionId) return q;
+        const isLiked = likedQuestionIds.includes(questionId);
+        const newUpvotes = isLiked ? Math.max(0, q.upvotes - 1) : q.upvotes + 1;
+        return { ...q, upvotes: newUpvotes };
+      })
+    );
+
+    setLikedQuestionIds(prev =>
+      prev.includes(questionId) ? prev.filter(id => id !== questionId) : [...prev, questionId]
     );
   };
 
@@ -117,7 +153,8 @@ const App: React.FC = () => {
     const newComment: Comment = {
       id: uuidv4(),
       text: commentText,
-      timestamp: new Date()
+      timestamp: new Date(),
+      upvotes: 0
     };
 
     setQuestions(prevQuestions =>
@@ -127,6 +164,26 @@ const App: React.FC = () => {
           : q
       )
     );
+  };
+
+  // Toggle like for a comment
+  const handleToggleCommentLike = (commentId: string, questionId: string) => {
+    setQuestions(prevQuestions =>
+      prevQuestions.map(q => {
+        if (q.id !== questionId) return q;
+        return {
+          ...q,
+          comments: q.comments.map(c => {
+            if (c.id !== commentId) return c;
+            const isLiked = likedCommentIds.includes(commentId);
+            const newUpvotes = isLiked ? Math.max(0, (c.upvotes || 0) - 1) : (c.upvotes || 0) + 1;
+            return { ...c, upvotes: newUpvotes };
+          })
+        };
+      })
+    );
+
+    setLikedCommentIds(prev => prev.includes(commentId) ? prev.filter(id => id !== commentId) : [...prev, commentId]);
   };
 
   const handlePinToggle = (questionId: string) => {
@@ -152,7 +209,11 @@ const App: React.FC = () => {
     const sorted = [...questions]
         .filter(q => !pinnedQuestionIds.includes(q.id))
         .filter(q => q.type === forumViewFilter)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        .sort((a, b) => {
+          // sort by upvotes desc, then by timestamp desc
+          if ((b.upvotes || 0) !== (a.upvotes || 0)) return (b.upvotes || 0) - (a.upvotes || 0);
+          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        });
 
     if (studentYear === 'All') {
         return { yearSpecificQuestions: [], allQuestions: sorted };
@@ -187,20 +248,57 @@ const App: React.FC = () => {
 
         {page === 'home' && (
              <div className="space-y-8">
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-2">Get Answers</h2>
-                    <p className="text-gray-600 mb-4">
-                        Submit your question about student life, academics, or administration at the University of Alabama. Our AI assistant will provide an answer based on official UA resources.
-                    </p>
-                    <QuestionForm 
-                        onSubmit={handleAiQuestionSubmit}
-                        currentStudentYear={studentYear}
-                    />
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow-md">
+                <div className="relative bg-white p-6 pr-20 rounded-lg shadow-md">
+                    <div className="absolute top-3 right-3">
+                      <div className="group relative inline-block">
+                        <img
+                          src={alabamaLogo}
+                          alt="University-backed answers"
+                          className="w-12 h-12 object-contain rounded"
+                        />
+
+                        <div
+                          role="tooltip"
+                          className="pointer-events-none absolute right-full top-0 transform translate-x-0 -translate-y-1/4 md:-translate-x-3 md:translate-y-0 w-64 md:w-72 bg-white border border-red-200 text-sm md:text-base text-gray-800 rounded-md p-3 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
+                        >
+                          <div className="font-semibold text-red-800 mb-1">University-backed answer</div>
+                          <div>Real answers backed by university rules, official sources, and documented policies.</div>
+                          <div className="absolute -right-3 top-4 w-3 h-3 bg-white border-t border-l border-red-200 transform rotate-45"></div>
+                        </div>
+                      </div>
+                    </div>
+                     <h2 className="text-2xl font-bold text-gray-800 mb-2">Get Answers</h2>
+                     <p className="text-gray-600 mb-4">
+                         Submit your question about student life, academics, or administration at the University of Alabama. Our AI assistant will provide an answer based on official UA resources. Verified Answers are school-sanctioned, sourced, and fact-checked.
+                     </p>
+                     <QuestionForm 
+                         onSubmit={handleAiQuestionSubmit}
+                         currentStudentYear={studentYear}
+                     />
+                 </div>
+                <div className="relative bg-white p-6 pr-20 rounded-lg shadow-md">
+                    <div className="absolute top-3 right-3">
+                      <div className="group relative inline-block">
+                        <img
+                          src={groupIcon}
+                          alt="Start a discussion"
+                          className="w-12 h-12 object-contain rounded"
+                        />
+
+                        <div
+                          role="tooltip"
+                          className="pointer-events-none absolute right-full top-0 transform translate-x-0 -translate-y-1/4 md:-translate-x-3 md:translate-y-0 w-64 md:w-72 bg-white border border-red-200 text-sm md:text-base text-gray-800 rounded-md p-3 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
+                        >
+                          <div className="font-semibold text-red-800 mb-1">Discussions</div>
+                          <div>Share opinions, experiences, and stories with other parents and students.</div>
+                          <div className="absolute -right-3 top-4 w-3 h-3 bg-white border-t border-l border-red-200 transform rotate-45"></div>
+                        </div>
+                      </div> 
+                    </div>
                     <h2 className="text-2xl font-bold text-gray-800 mb-2">Start a Discussion</h2>
                     <p className="text-gray-600 mb-4">
-                        Crowd-source real reviews, thoughts, and experiences from other parents on the platform.
+                        Crowd-source real reviews, thoughts, and experiences from other parents on the platform. Discussions are community opinions and personal stories.
+
                     </p>
                     <DiscussionForm onSubmit={handleDiscussionSubmit} />
                 </div>
@@ -216,7 +314,10 @@ const App: React.FC = () => {
                 pinnedQuestions={pinnedQuestions}
                 yearSpecificQuestions={yearSpecificQuestions}
                 allQuestions={allQuestions}
-                onUpvote={handleUpvote}
+                onToggleLike={handleToggleLike}
+                likedIds={likedQuestionIds}
+                likedCommentIds={likedCommentIds}
+                onToggleCommentLike={handleToggleCommentLike}
                 onAddComment={handleAddComment}
                 selectedYear={studentYear}
                 currentView={forumViewFilter}
