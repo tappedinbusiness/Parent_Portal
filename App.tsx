@@ -12,6 +12,7 @@ import ForumFilter from './components/ForumFilter';
 import { v4 as uuidv4 } from 'uuid';
 import alabamaLogo from './assets/Alabama_Crimson_Tide_logo.svg.png';
 import groupIcon from './assets/group-of-people-svgrepo-com.svg';
+import forumSeedRaw from './data/forumSeed.json';
 
 type Page = 'home' | 'forum' | 'admin';
 type ForumView = 'discussion' | 'ai';
@@ -20,26 +21,22 @@ const App: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   // Load initial seed data on first mount if present
   React.useEffect(() => {
-    const loadSeed = async () => {
-      try {
-        const res = await fetch('/data/forumSeed.json');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) return;
-        setQuestions(prev => {
-          // only load seed if there are no existing questions
-          if (prev.length > 0) return prev;
-          return data.map((q: any) => ({
-            ...q,
-            timestamp: new Date(q.timestamp),
-            comments: (q.comments || []).map((c: any) => ({ ...c, timestamp: new Date(c.timestamp), upvotes: c.upvotes ?? 0 }))
-          }));
-        });
-      } catch (err) {
-        console.warn('Failed to load seed data', err);
-      }
-    };
-    loadSeed();
+    if (!Array.isArray(forumSeedRaw) || forumSeedRaw.length === 0) return;
+
+    setQuestions(prev => {
+      // only load seed if there are no existing questions
+      if (prev.length > 0) return prev;
+
+      return forumSeedRaw.map((q: any) => ({
+        ...q,
+        timestamp: new Date(q.timestamp),
+        comments: (q.comments || []).map((c: any) => ({
+          ...c,
+          timestamp: new Date(c.timestamp),
+          upvotes: c.upvotes ?? 0,
+        })),
+      }));
+    });
   }, []);
 
   const [page, setPage] = useState<Page>('home');
