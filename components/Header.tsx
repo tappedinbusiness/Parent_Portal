@@ -1,14 +1,18 @@
 import React from 'react';
+import { useUser } from '@clerk/clerk-react';
 
 interface HeaderProps {
-    currentPage: 'home' | 'forum' | 'admin';
-    setPage: (page: 'home' | 'forum' | 'admin') => void;
+    currentPage: 'home' | 'forum' | 'account';
+    setPage: (page: 'home' | 'forum' | 'account') => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ currentPage, setPage }) => {
   const navLinkClasses = "px-3 py-2 rounded-md text-sm font-medium transition-colors";
   const activeClasses = "bg-red-100 text-red-800";
   const inactiveClasses = "text-gray-600 hover:bg-gray-100 hover:text-gray-900";
+  const { isLoaded, isSignedIn, user } = useUser();
+
+  const accountLabel = isLoaded && isSignedIn && user ? `👋 Hello, ${user.firstName || user.fullName || 'User'}` : 'Sign In';
 
   return (
     <header className="bg-white shadow-md">
@@ -27,7 +31,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, setPage }) => {
         <nav className="flex items-center space-x-2">
             <button 
                 onClick={() => setPage('home')}
-                className={`${navLinkClasses} ${currentPage === 'home' ? activeClasses : inactiveClasses}`}
+                className={`${navLinkClasses} ${currentPage === 'home' ? activeClasses : inactiveClasses}`} 
             >
                 Home
             </button>
@@ -38,10 +42,10 @@ const Header: React.FC<HeaderProps> = ({ currentPage, setPage }) => {
                 Forum
             </button>
             <button 
-                onClick={() => setPage('admin')}
-                className={`${navLinkClasses} ${currentPage === 'admin' ? activeClasses : inactiveClasses}`}
+                onClick={() => setPage('account')}
+                className={`${navLinkClasses} ${currentPage === 'account' ? activeClasses : inactiveClasses}`}
             >
-                Admin
+                {accountLabel}
             </button>
         </nav>
       </div>

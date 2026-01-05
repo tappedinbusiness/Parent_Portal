@@ -26,7 +26,7 @@ const ForumFilter: React.FC<ForumFilterProps> = ({ currentView, onViewChange }) 
         className={`${baseClasses} ${currentView === 'ai' ? activeClasses : inactiveClasses} focus:ring-red-500`}
         aria-pressed={currentView === 'ai'}
       >
-        Get Answers
+        Get Verified Answers
       </button>
     </div>
   );

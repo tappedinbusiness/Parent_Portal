@@ -19,6 +19,7 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
 
   const [query, setQuery] = React.useState('');
   const [filterMode, setFilterMode] = React.useState<'all' | 'verified' | 'discussion'>('all');
+  const [sortMode, setSortMode] = React.useState<'recency' | 'likes'>('recency');
 
   const normalize = (s: string) => s.toLowerCase();
 
@@ -42,6 +43,20 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
 
   const applyFilters = (items: Question[]) => {
     return items.filter(q => matchesQuery(q) && matchesFilterMode(q));
+  };
+
+  const sortItems = (items: Question[]) => {
+    const copy = [...items];
+    if (sortMode === 'recency') {
+      return copy.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    }
+    // sortMode === 'likes'
+    return copy.sort((a, b) => {
+      const upA = a.upvotes ?? 0;
+      const upB = b.upvotes ?? 0;
+      if (upB !== upA) return upB - upA;
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
   };
 
   const renderForumList = (title: string, questions: Question[]) => {
@@ -84,7 +99,12 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
   const filteredYearSpecific = applyFilters(yearSpecificQuestions);
   const filteredAll = applyFilters(allQuestions);
 
-  const allNonPinnedQuestions = filteredAll.filter(q => !filteredPinned.some(pq => pq.id === q.id));
+  // then apply sorting according to sortMode
+  const sortedPinned = sortItems(filteredPinned);
+  const sortedYearSpecific = sortItems(filteredYearSpecific);
+  const sortedAll = sortItems(filteredAll);
+
+  const allNonPinnedQuestions = sortedAll.filter(q => !sortedPinned.some(pq => pq.id === q.id));
 
   const mainEmptyMessage = currentView === 'discussion'
     ? 'There are no discussions in the forum yet. Be the first to start one!'
@@ -92,13 +112,13 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
 
   return (
     <div>
-      {filteredPinned.length > 0 && (
+      {sortedPinned.length > 0 && (
         <div className="mb-8">
           <h3 className="text-xl font-bold text-gray-700 mb-4 pb-2 border-b-2 border-yellow-400">
             📌 Pinned Questions
           </h3>
           <div className="space-y-4">
-            {filteredPinned.map((q) => (
+            {sortedPinned.map((q) => (
               <ForumItem
                 key={`pinned-${q.id}`}
                 question={q}
@@ -130,12 +150,24 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
             <button type="button" onClick={() => setFilterMode('verified')} className={`px-3 py-2 text-sm ${filterMode==='verified' ? 'bg-red-700 text-white' : 'bg-white text-gray-700 border'}`}>Verified Answers</button>
             <button type="button" onClick={() => setFilterMode('discussion')} className={`px-3 py-2 text-sm rounded-r-md ${filterMode==='discussion' ? 'bg-red-700 text-white' : 'bg-white text-gray-700 border'}`}>Discussions</button>
           </div>
+          <div className="ml-3 flex items-center space-x-2">
+            <label htmlFor="sort-select" className="text-sm text-gray-600">Sort:</label>
+            <select
+              id="sort-select"
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as 'recency' | 'likes')}
+              className="p-2 border border-gray-300 rounded-md text-sm bg-white"
+            >
+              <option value="recency">Recency (Newest)</option>
+              <option value="likes">Likes (Most)</option>
+            </select>
+          </div>
         </div>
       </div>
 
       <h2 className="text-2xl font-bold text-gray-800 mb-4">Public Forum</h2>
 
-      {allNonPinnedQuestions.length === 0 && filteredPinned.length === 0 ? (
+      {allNonPinnedQuestions.length === 0 && sortedPinned.length === 0 ? (
         <div className="text-center p-10 bg-white rounded-lg shadow-md">
           <p className="text-gray-500">
             {mainEmptyMessage}
@@ -145,12 +177,12 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
         <>
           {isFilterActive && (
             <div className="mb-8">
-              {renderForumList(`Top Questions for ${selectedYear} Students`, filteredYearSpecific)}
+              {renderForumList(`Top Questions for ${selectedYear} Students`, sortedYearSpecific)}
             </div>
           )}
           
           {(() => {
-            const yearSpecificIds = new Set(yearSpecificQuestions.map(q => q.id));
+            const yearSpecificIds = new Set(sortedYearSpecific.map(q => q.id));
             const remainingQuestions = allNonPinnedQuestions.filter(q => !yearSpecificIds.has(q.id));
             
             if (remainingQuestions.length > 0) {

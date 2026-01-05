@@ -4,6 +4,7 @@ import { marked } from 'marked';
 import alabamaLogo from '../assets/Alabama_Crimson_Tide_logo.svg.png';
 import groupIcon from '../assets/group-of-people-svgrepo-com.svg';
 import fbLikeIcon from '../assets/facebook-like-svgrepo-com.svg';
+import { SignedIn, SignedOut, SignInButton } from '@clerk/clerk-react';
 
 // Configure marked library for secure and consistent rendering
 marked.setOptions({
@@ -68,22 +69,35 @@ const CommentForm: React.FC<{ onAddComment: (text: string) => void }> = ({ onAdd
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex items-start space-x-3">
-            <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Add a comment..."
-                className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-red-700 focus:border-red-700 text-sm"
-                rows={2}
-            />
-            <button
-                type="submit"
-                className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 disabled:bg-gray-300"
-                disabled={!commentText.trim()}
-            >
-                Post
-            </button>
-        </form>
+        <>
+          <SignedOut>
+            <div className="p-3 bg-white rounded-md border border-gray-200 text-sm">
+              <p className="text-gray-700 mb-2">You must be signed in to post comments.</p>
+              <SignInButton mode="redirect">
+                <button className="px-3 py-2 bg-red-800 text-white rounded-md">Sign In</button>
+              </SignInButton>
+            </div>
+          </SignedOut>
+
+          <SignedIn>
+            <form onSubmit={handleSubmit} className="flex items-start space-x-3">
+                <textarea
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="Add a comment..."
+                    className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-red-700 focus:border-red-700 text-sm"
+                    rows={2}
+                />
+                <button
+                    type="submit"
+                    className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 disabled:bg-gray-300"
+                    disabled={!commentText.trim()}
+                >
+                    Post
+                </button>
+            </form>
+          </SignedIn>
+        </>
     );
 };
 
@@ -163,18 +177,29 @@ const ForumItem: React.FC<{ question: Question; onToggleLike: (id: string) => vo
 
       <div className="mt-4 flex items-center justify-between border-t pt-3">
         <div className="flex items-center">
-          {/** Like button: toggles liked state and updates count via parent handler */}
-          <button
-            onClick={() => onToggleLike(question.id)}
-            aria-pressed={likedIds.includes(question.id)}
-            className={`flex items-center space-x-2 text-sm font-medium transition-colors p-2 rounded-md focus:outline-none ${likedIds.includes(question.id) ? 'text-green-700 bg-green-50' : 'text-gray-600 hover:text-red-800 hover:bg-gray-100'}`}
-          >
-            <img src={fbLikeIcon} alt="Like" className="w-5 h-5 object-contain" />
-            <span>{likedIds.includes(question.id) ? 'Liked' : 'Like'} ({question.upvotes})</span>
-          </button>
+          {/** Like button: signed-in users can like; signed-out see sign-in CTA */}
+          <SignedOut>
+            <SignInButton mode="redirect">
+              <button className="flex items-center space-x-2 text-sm font-medium transition-colors p-2 rounded-md focus:outline-none text-gray-600 hover:text-red-800 hover:bg-gray-100">
+                <img src={fbLikeIcon} alt="Like" className="w-5 h-5 object-contain" />
+                <span>Like ({question.upvotes})</span>
+              </button>
+            </SignInButton>
+          </SignedOut>
+
+          <SignedIn>
+            <button
+              onClick={() => onToggleLike(question.id)}
+              aria-pressed={likedIds.includes(question.id)}
+              className={`flex items-center space-x-2 text-sm font-medium transition-colors p-2 rounded-md focus:outline-none ${likedIds.includes(question.id) ? 'text-green-700 bg-green-50' : 'text-gray-600 hover:text-red-800 hover:bg-gray-100'}`}
+            >
+              <img src={fbLikeIcon} alt="Like" className="w-5 h-5 object-contain" />
+              <span>{likedIds.includes(question.id) ? 'Liked' : 'Like'} ({question.upvotes})</span>
+            </button>
+          </SignedIn>
         </div>
 
-        <span className="text-md text-gray-600 ml-4">Date Posted: {formattedDate}</span>
+        <span className="text-sm text-gray-500 ml-4">{formattedDate}</span>
       </div>
       
       <div className="mt-4 border-t pt-4">
@@ -185,16 +210,27 @@ const ForumItem: React.FC<{ question: Question; onToggleLike: (id: string) => vo
                      <p className="text-gray-800">{comment.text}</p>
                      <div className="flex items-center justify-between mt-2">
                        <p className="text-xs text-gray-400">{new Date(comment.timestamp).toLocaleString()}</p>
-                       <button
-                         onClick={() => onToggleCommentLike?.(comment.id, question.id)}
-                         aria-pressed={likedCommentIds.includes(comment.id)}
-                         className={`ml-3 flex items-center space-x-2 text-xs font-medium transition-colors p-1 rounded ${likedCommentIds.includes(comment.id) ? 'text-green-700 bg-green-50' : 'text-gray-500 hover:text-green-700 hover:bg-gray-100'}`}
-                       >
-                         <img src={fbLikeIcon} alt="Like comment" className="w-4 h-4 object-contain" />
-                         <span>{comment.upvotes ?? 0}</span>
-                       </button>
-                     </div>
+                       <SignedOut>
+                         <SignInButton mode="redirect">
+                           <button className="ml-3 flex items-center space-x-2 text-xs font-medium transition-colors p-1 rounded text-gray-500 hover:text-green-700 hover:bg-gray-100">
+                             <img src={fbLikeIcon} alt="Like comment" className="w-4 h-4 object-contain" />
+                             <span>{comment.upvotes ?? 0}</span>
+                           </button>
+                         </SignInButton>
+                       </SignedOut>
+
+                       <SignedIn>
+                         <button
+                           onClick={() => onToggleCommentLike?.(comment.id, question.id)}
+                           aria-pressed={likedCommentIds.includes(comment.id)}
+                           className={`ml-3 flex items-center space-x-2 text-xs font-medium transition-colors p-1 rounded ${likedCommentIds.includes(comment.id) ? 'text-green-700 bg-green-50' : 'text-gray-500 hover:text-green-700 hover:bg-gray-100'}`}
+                         >
+                           <img src={fbLikeIcon} alt="Like comment" className="w-4 h-4 object-contain" />
+                           <span>{comment.upvotes ?? 0}</span>
+                         </button>
+                       </SignedIn>
                  </div>
+             </div>
             ))}
             {question.comments.length === 0 && (
                 <p className="text-sm text-gray-500">No comments yet.</p>

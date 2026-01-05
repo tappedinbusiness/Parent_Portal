@@ -7,14 +7,14 @@ import QuestionForm from './components/QuestionForm';
 import DiscussionForm from './components/DiscussionForm';
 import ForumDisplay from './components/ForumDisplay';
 import StudentYearSelect from './components/StudentYearSelect';
-import AdminConsole from './components/AdminConsole';
+import Account from './components/Account';
 import ForumFilter from './components/ForumFilter';
 import { v4 as uuidv4 } from 'uuid';
 import alabamaLogo from './assets/Alabama_Crimson_Tide_logo.svg.png';
 import groupIcon from './assets/group-of-people-svgrepo-com.svg';
 import forumSeedRaw from './data/forumSeed.json';
 
-type Page = 'home' | 'forum' | 'admin';
+type Page = 'home' | 'forum' | 'account';
 type ForumView = 'discussion' | 'ai';
 
 const App: React.FC = () => {
@@ -227,7 +227,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-50 font-sans">
       <Header currentPage={page} setPage={setPage} />
       <main className="container mx-auto p-4 md:p-8 max-w-4xl">
-        {page !== 'admin' && (
+        {page !== 'account' && (
           <div className="mb-6">
               <label htmlFor="global-student-year" className="block text-sm font-medium text-gray-700 mb-1">
                   My Student's Year:
@@ -264,7 +264,7 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                     <h2 className="text-2xl font-bold text-gray-800 mb-2">Get Answers</h2>
+                     <h2 className="text-2xl font-bold text-gray-800 mb-2">Get Verified Answers</h2>
                      <p className="text-gray-600 mb-4">
                          Submit your question about student life, academics, or administration at the University of Alabama. Our AI assistant will provide an answer based on official UA resources. Verified Answers are school-sanctioned, sourced, and fact-checked.
                      </p>
@@ -321,12 +321,8 @@ const App: React.FC = () => {
             />
           </>
         )}
-        {page === 'admin' && (
-          <AdminConsole
-            questions={questions}
-            pinnedIds={pinnedQuestionIds}
-            onPinToggle={handlePinToggle}
-          />
+        {page === 'account' && (
+          <Account />
         )}
       </main>
     </div>

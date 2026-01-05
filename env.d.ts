@@ -3,6 +3,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_OPENAI_API_KEY?: string;
+  readonly VITE_CLERK_PUBLISHABLE_KEY?: string;
   // add other VITE_ variables here as needed
 }
 
