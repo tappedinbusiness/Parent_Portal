@@ -3,7 +3,7 @@ import type { Question, StudentYear } from '../types';
 import ForumItem from './ForumItem';
 
 interface ForumDisplayProps {
-  pinnedQuestions: Question[];
+  featuredQuestion?: Question | null;
   yearSpecificQuestions: Question[];
   allQuestions: Question[];
   onToggleLike: (questionId: string) => void;
@@ -15,13 +15,21 @@ interface ForumDisplayProps {
   currentView: 'discussion' | 'ai';
 }
 
-const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecificQuestions, allQuestions, onToggleLike, onAddComment, likedIds, likedCommentIds = [], onToggleCommentLike, selectedYear, currentView }) => {
-
+const ForumDisplay: React.FC<ForumDisplayProps> = ({
+  featuredQuestion = null,
+  yearSpecificQuestions,
+  allQuestions,
+  onToggleLike,
+  onAddComment,
+  likedIds,
+  likedCommentIds = [],
+  onToggleCommentLike,
+  selectedYear,
+  currentView
+}) => {
   const [query, setQuery] = React.useState('');
   const [filterMode, setFilterMode] = React.useState<'all' | 'verified' | 'discussion'>('all');
   const [sortMode, setSortMode] = React.useState<'recency' | 'likes'>('recency');
-
-  const normalize = (s: string) => s.toLowerCase();
 
   const matchesQuery = (q: Question) => {
     if (!query.trim()) return true;
@@ -32,12 +40,8 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
 
   const matchesFilterMode = (q: Question) => {
     if (filterMode === 'all') return true;
-    if (filterMode === 'verified') {
-      return q.type === 'ai' && q.status === 'answered';
-    }
-    if (filterMode === 'discussion') {
-      return q.type === 'discussion';
-    }
+    if (filterMode === 'verified') return q.type === 'ai' && q.status === 'answered';
+    if (filterMode === 'discussion') return q.type === 'discussion';
     return true;
   };
 
@@ -50,7 +54,6 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
     if (sortMode === 'recency') {
       return copy.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     }
-    // sortMode === 'likes'
     return copy.sort((a, b) => {
       const upA = a.upvotes ?? 0;
       const upB = b.upvotes ?? 0;
@@ -60,7 +63,8 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
   };
 
   const renderForumList = (title: string, questions: Question[]) => {
-    const emptyMessage = currentView === 'discussion'
+    const emptyMessage =
+      currentView === 'discussion'
         ? 'No discussions found for this category.'
         : 'No AI-answered questions found for this category.';
     return (
@@ -71,9 +75,9 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
         {questions.length > 0 ? (
           <div className="space-y-4">
             {questions.map((q) => (
-              <ForumItem 
-                key={q.id} 
-                question={q} 
+              <ForumItem
+                key={q.id}
+                question={q}
                 onToggleLike={onToggleLike}
                 likedIds={likedIds}
                 onAddComment={onAddComment}
@@ -84,9 +88,7 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
           </div>
         ) : (
           <div className="text-center p-6 bg-white rounded-lg shadow-sm">
-            <p className="text-gray-500">
-              {emptyMessage}
-            </p>
+            <p className="text-gray-500">{emptyMessage}</p>
           </div>
         )}
       </>
@@ -94,41 +96,51 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
   };
 
   const isFilterActive = selectedYear !== 'All';
-  // apply search / type filters to lists
-  const filteredPinned = applyFilters(pinnedQuestions);
+
+  // Apply filters to lists
   const filteredYearSpecific = applyFilters(yearSpecificQuestions);
   const filteredAll = applyFilters(allQuestions);
 
-  // then apply sorting according to sortMode
-  const sortedPinned = sortItems(filteredPinned);
+  // Sort lists
   const sortedYearSpecific = sortItems(filteredYearSpecific);
   const sortedAll = sortItems(filteredAll);
 
-  const allNonPinnedQuestions = sortedAll.filter(q => !sortedPinned.some(pq => pq.id === q.id));
+  // Filter out featured question so it never appears twice
+  const featuredId = featuredQuestion?.id ?? null;
+  const yearSpecificNoFeatured = featuredId
+    ? sortedYearSpecific.filter(q => q.id !== featuredId)
+    : sortedYearSpecific;
+  const allNoFeatured = featuredId
+    ? sortedAll.filter(q => q.id !== featuredId)
+    : sortedAll;
 
-  const mainEmptyMessage = currentView === 'discussion'
-    ? 'There are no discussions in the forum yet. Be the first to start one!'
-    : 'There are no AI-answered questions in the forum yet. Be the first to ask one!';
+  const mainEmptyMessage =
+    currentView === 'discussion'
+      ? 'There are no discussions in the forum yet. Be the first to start one!'
+      : 'There are no AI-answered questions in the forum yet. Be the first to ask one!';
+
+  const shouldShowFeatured =
+    !!featuredQuestion &&
+    matchesQuery(featuredQuestion) &&
+    matchesFilterMode(featuredQuestion);
 
   return (
     <div>
-      {sortedPinned.length > 0 && (
+      {shouldShowFeatured && (
         <div className="mb-8">
           <h3 className="text-xl font-bold text-gray-700 mb-4 pb-2 border-b-2 border-yellow-400">
-            📌 Pinned Questions
+            ⭐ Your Answer
           </h3>
           <div className="space-y-4">
-            {sortedPinned.map((q) => (
-              <ForumItem
-                key={`pinned-${q.id}`}
-                question={q}
-                onToggleLike={onToggleLike}
-                likedIds={likedIds}
-                likedCommentIds={likedCommentIds}
-                onToggleCommentLike={onToggleCommentLike}
-                onAddComment={onAddComment}
-              />
-            ))}
+            <ForumItem
+              key={`featured-${featuredQuestion!.id}`}
+              question={featuredQuestion!}
+              onToggleLike={onToggleLike}
+              likedIds={likedIds}
+              likedCommentIds={likedCommentIds}
+              onToggleCommentLike={onToggleCommentLike}
+              onAddComment={onAddComment}
+            />
           </div>
         </div>
       )}
@@ -146,10 +158,29 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
         <div className="flex items-center space-x-2 mt-2 sm:mt-0">
           <span className="text-sm text-gray-600">Filter:</span>
           <div className="inline-flex rounded-md shadow-sm" role="tablist">
-            <button type="button" onClick={() => setFilterMode('all')} className={`px-3 py-2 text-sm rounded-l-md ${filterMode==='all' ? 'bg-red-700 text-white' : 'bg-white text-gray-700 border'}`}>All</button>
-            <button type="button" onClick={() => setFilterMode('verified')} className={`px-3 py-2 text-sm ${filterMode==='verified' ? 'bg-red-700 text-white' : 'bg-white text-gray-700 border'}`}>Verified Answers</button>
-            <button type="button" onClick={() => setFilterMode('discussion')} className={`px-3 py-2 text-sm rounded-r-md ${filterMode==='discussion' ? 'bg-red-700 text-white' : 'bg-white text-gray-700 border'}`}>Discussions</button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('all')}
+              className={`px-3 py-2 text-sm rounded-l-md ${filterMode === 'all' ? 'bg-red-700 text-white' : 'bg-white text-gray-700 border'}`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('verified')}
+              className={`px-3 py-2 text-sm ${filterMode === 'verified' ? 'bg-red-700 text-white' : 'bg-white text-gray-700 border'}`}
+            >
+              Verified Answers
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('discussion')}
+              className={`px-3 py-2 text-sm rounded-r-md ${filterMode === 'discussion' ? 'bg-red-700 text-white' : 'bg-white text-gray-700 border'}`}
+            >
+              Discussions
+            </button>
           </div>
+
           <div className="ml-3 flex items-center space-x-2">
             <label htmlFor="sort-select" className="text-sm text-gray-600">Sort:</label>
             <select
@@ -167,24 +198,22 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({ pinnedQuestions, yearSpecif
 
       <h2 className="text-2xl font-bold text-gray-800 mb-4">Public Forum</h2>
 
-      {allNonPinnedQuestions.length === 0 && sortedPinned.length === 0 ? (
+      {allNoFeatured.length === 0 && yearSpecificNoFeatured.length === 0 && !shouldShowFeatured ? (
         <div className="text-center p-10 bg-white rounded-lg shadow-md">
-          <p className="text-gray-500">
-            {mainEmptyMessage}
-          </p>
+          <p className="text-gray-500">{mainEmptyMessage}</p>
         </div>
       ) : (
         <>
           {isFilterActive && (
             <div className="mb-8">
-              {renderForumList(`Top Questions for ${selectedYear} Students`, sortedYearSpecific)}
+              {renderForumList(`Top Questions for ${selectedYear} Students`, yearSpecificNoFeatured)}
             </div>
           )}
-          
+
           {(() => {
-            const yearSpecificIds = new Set(sortedYearSpecific.map(q => q.id));
-            const remainingQuestions = allNonPinnedQuestions.filter(q => !yearSpecificIds.has(q.id));
-            
+            const yearSpecificIds = new Set(yearSpecificNoFeatured.map(q => q.id));
+            const remainingQuestions = allNoFeatured.filter(q => !yearSpecificIds.has(q.id));
+
             if (remainingQuestions.length > 0) {
               return renderForumList(isFilterActive ? 'All Other Questions' : 'All Questions', remainingQuestions);
             }

@@ -294,9 +294,9 @@ export default async function handler(req: any, res: any) {
     // 3) Not a duplicate, generate a fresh answer
     const systemMessage = buildAnswerSystemMessage(studentYear);
     const userMessage = `
-Parent question: "${cleanedQuestion}"
-Student year: "${studentYear ?? "All"}"
-`.trim();
+        Parent question: "${cleanedQuestion}"
+        Student year: "${studentYear ?? "All"}"
+        `.trim();
 
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
@@ -325,6 +325,14 @@ Student year: "${studentYear ?? "All"}"
     if (parsed.status !== "answered" && parsed.status !== "rejected") {
       res.status(500).json({ error: "Invalid status from OpenAI" });
       return;
+    }
+
+    //Don't save to DB if question is rejected
+    if(parsed.status === "rejected"){ 
+        res.status(200).json({
+            ...parsed,
+          });
+        return;
     }
 
     // 4) Save to DB only if new
