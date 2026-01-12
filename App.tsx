@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-//import { getAIAnswer, checkForDuplicate, correctSpelling, moderateDiscussionTopic } from './services/geminiService';
 import { getAIAnswer, checkForDuplicate, correctSpelling, moderateDiscussionTopic } from './services/openaiService';
 import type { Question, StudentYear, Comment } from './types';
 import Header from './components/Header';
@@ -12,32 +11,13 @@ import ForumFilter from './components/ForumFilter';
 import { v4 as uuidv4 } from 'uuid';
 import alabamaLogo from './assets/Alabama_Crimson_Tide_logo.svg.png';
 import groupIcon from './assets/group-of-people-svgrepo-com.svg';
-import forumSeedRaw from './data/forumSeed.json';
+import { useAuth } from '@clerk/clerk-react';
 
 type Page = 'home' | 'forum' | 'account';
 type ForumView = 'discussion' | 'ai';
 
 const App: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
-  // Load initial seed data on first mount if present
-  React.useEffect(() => {
-    if (!Array.isArray(forumSeedRaw) || forumSeedRaw.length === 0) return;
-
-    setQuestions(prev => {
-      // only load seed if there are no existing questions
-      if (prev.length > 0) return prev;
-
-      return forumSeedRaw.map((q: any) => ({
-        ...q,
-        timestamp: new Date(q.timestamp),
-        comments: (q.comments || []).map((c: any) => ({
-          ...c,
-          timestamp: new Date(c.timestamp),
-          upvotes: c.upvotes ?? 0,
-        })),
-      }));
-    });
-  }, []);
 
   const [page, setPage] = useState<Page>('home');
   const [studentYear, setStudentYear] = useState<StudentYear | 'All'>('All');
@@ -45,61 +25,126 @@ const App: React.FC = () => {
   const [forumViewFilter, setForumViewFilter] = useState<ForumView>('discussion');
   const [likedQuestionIds, setLikedQuestionIds] = useState<string[]>([]);
   const [likedCommentIds, setLikedCommentIds] = useState<string[]>([]);
+  const [featuredQuestion, setFeaturedQuestion] = useState<Question | null>(null);
+
+  const { isSignedIn, getToken } = useAuth();
+
+  useEffect(() => {
+    loadAiQuestionsFromDb();
+  }, []);
+
+  const loadAiQuestionsFromDb = async () => {
+    try {
+      const res = await fetch("/api/questions?type=ai&limit=50");
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Failed to load questions:", data);
+        return;
+      }
+
+      // data.questions will match your Question shape (timestamp is a Date already)
+      setQuestions(data.questions);
+    } catch (err) {
+      console.error("Failed to load questions:", err);
+    }
+  };
 
 
   const handleAiQuestionSubmit = async (questionText: string): Promise<boolean> => {
     try {
-        const correctedQuestionText = await correctSpelling(questionText);
-        const existingQuestionTexts = questions.map(q => q.questionText);
-        const duplicateCheck = await checkForDuplicate(correctedQuestionText, existingQuestionTexts);
 
-        if (duplicateCheck.isDuplicate) {
-            alert(`This question seems to be a duplicate of a previously asked question. Please check the forum.`);
-            setPage('forum');
-            setForumViewFilter('ai');
-            return false;
-        }
+      // Get a token if signed in. Anonymous users can still submit questions.
+      const token = isSignedIn ? await getToken() : null;
 
-        const aiResponse = await getAIAnswer(correctedQuestionText, studentYear);
+      // New getAIAnswer expects an object (per the updated openaiService.ts)
+      const aiResponse = await getAIAnswer({
+        question: questionText,
+        studentYear,
+        token,
+      });
 
-        if (aiResponse.status === 'rejected') {
-          alert(`Your question could not be answered. Reason: ${aiResponse.reason}`);
-          return false;
-        }
-        
+      // Handle transport/server errors
+      if ("error" in aiResponse) {
+        console.error("AI request failed:", aiResponse);
+        alert(`An error occurred while submitting your question.`);
+        return false;
+      }
+
+      // Handle rejected questions
+      if (aiResponse.status === "rejected") {
+        alert(`Your question could not be answered. Reason: ${aiResponse.reason}`);
+        return false;
+      }
+
+      // Build a question object from the response.
+      // If the server returned a questionId, use it so duplicates map to the same item.
+      const serverId = aiResponse.questionId ?? null;
+      const localId = serverId ?? uuidv4();
+
+      // Avoid duplicating in local state if we already have it (common on duplicates).
+      const alreadyInState = serverId
+        ? questions.some((q) => q.id === serverId)
+        : false;
+
+      if (!alreadyInState) {
         const newQuestion: Question = {
-            id: uuidv4(),
-            userId: 'anonymous',
-            type: 'ai',
-            questionText: correctedQuestionText,
-            aiAnswer: aiResponse.answer || 'No response generated.',
-            status: aiResponse.status,
-            timestamp: new Date(),
-            upvotes: 0,
-            comments: [],
+          id: localId,
+          userId: isSignedIn ? "signed-in" : "anonymous", // keep your existing pattern for now
+          type: "ai",
+          questionText: questionText,
+          aiAnswer: aiResponse.answer || "No response generated.",
+          status: aiResponse.status,
+          timestamp: new Date(),
+          upvotes: 0,
+          comments: [],
         };
 
-        if (studentYear !== 'All') {
-            newQuestion.studentYear = studentYear;
+        if (studentYear !== "All") {
+          newQuestion.studentYear = studentYear;
         }
-        
-        setQuestions(prevQuestions => [newQuestion, ...prevQuestions]);
-        setPage('forum');
-        setForumViewFilter('ai');
-        return true;
 
-    } catch(err) {
-        console.error("Failed to submit question:", err);
-        alert(`An error occurred while submitting your question. Please check the console for details.`);
-        return false;
+        setQuestions((prevQuestions) => [newQuestion, ...prevQuestions]);
+      } else {
+        // If it was already in state (duplicate), you may still want to ensure the answer is present.
+        setQuestions((prev) =>
+          prev.map((q) =>
+            q.id === serverId
+              ? { ...q, aiAnswer: aiResponse.answer || q.aiAnswer }
+              : q
+          )
+        );
+      }
+
+      setFeaturedQuestion((prev) => ({
+        ...(prev ?? {}),
+        id: localId,
+        questionText: questionText,
+        aiAnswer: aiResponse.answer || prev?.aiAnswer,
+        status: aiResponse.status,
+        timestamp: new Date(),
+      }));
+
+
+      // Navigate to forum either way (new or duplicate)
+      setPage("forum");
+      setForumViewFilter("ai");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      return true;
+    } catch (err) {
+      console.error("Failed to submit question:", err);
+      alert(`An error occurred while submitting your question. Please check the console for details.`);
+      return false;
     }
   };
 
+
   const handleDiscussionSubmit = async (topic: string): Promise<boolean> => {
     try {
-      const moderationResult = await moderateDiscussionTopic(topic);
+      const moderationResult = await moderateDiscussionTopic();
 
-      if (!moderationResult.isApproved) {
+      if (!moderationResult.isAppropriate) {
         alert(`Your discussion topic could not be posted. Reason: ${moderationResult.reason}`);
         return false;
       }
@@ -181,18 +226,6 @@ const App: React.FC = () => {
     );
 
     setLikedCommentIds(prev => prev.includes(commentId) ? prev.filter(id => id !== commentId) : [...prev, commentId]);
-  };
-
-  const handlePinToggle = (questionId: string) => {
-    setPinnedQuestionIds(prevIds => {
-      if (prevIds.includes(questionId)) {
-        return prevIds.filter(id => id !== questionId);
-      }
-      if (prevIds.length < 2) {
-        return [...prevIds, questionId];
-      }
-      return prevIds;
-    });
   };
   
   const pinnedQuestions = useMemo(() => {
@@ -308,7 +341,7 @@ const App: React.FC = () => {
               onViewChange={setForumViewFilter}
             />
             <ForumDisplay 
-                pinnedQuestions={pinnedQuestions}
+                featuredQuestion={featuredQuestion}
                 yearSpecificQuestions={yearSpecificQuestions}
                 allQuestions={allQuestions}
                 onToggleLike={handleToggleLike}
