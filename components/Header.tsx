@@ -18,9 +18,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, setPage }) => {
     <header className="bg-white shadow-md">
       <div className="container mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
         <div className="flex items-center">
-            <div className="bg-red-800 text-white font-bold text-2xl w-14 h-14 flex items-center justify-center rounded-full mr-4">
-            UA
-            </div>
+            <img src="../assets/tappedinlogo.png" className="w-16 h-16"></img>
             <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
                 University of Alabama
