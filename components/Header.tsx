@@ -1,5 +1,6 @@
 import React from 'react';
 import { useUser } from '@clerk/clerk-react';
+import tappedinLogo from '../assets/tappedinlogo.svg.png';
 
 interface HeaderProps {
     currentPage: 'home' | 'forum' | 'account';
@@ -18,7 +19,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, setPage }) => {
     <header className="bg-white shadow-md">
       <div className="container mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
         <div className="flex items-center">
-            <img src="../assets/tappedinlogo.png" className="w-16 h-16"></img>
+            <img src={tappedinLogo} className="w-16 h-16"></img>
             <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
                 University of Alabama
