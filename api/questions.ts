@@ -103,11 +103,23 @@ export default async function handler(req: any, res: any) {
       // Optional: attach clerk user id if signed in, otherwise anonymous
       const clerkUserId = await getOptionalClerkUserId(req);
 
+      let isAnonymous = false;
+
+        // Check if user prefers to post anonymously
+
+        const { data: userData } = await supabase
+          .from("users")
+          .select("post_anonymously, first_name, last_name, avatar_url, post_anonymously")
+          .eq("clerk_user_id", clerkUserId)
+          .single();
+        isAnonymous = userData?.post_anonymously ?? false;
+      
       const insertPayload: any = {
         type: "discussion",
         clerk_user_id: clerkUserId,
         student_year: studentYear ?? "All",
         question_text: topic.trim(),
+        is_anonymous: isAnonymous,
         status: null,
         ai_answer: null,
       };
@@ -115,13 +127,16 @@ export default async function handler(req: any, res: any) {
       const { data: inserted, error: insertErr } = await supabase
         .from("questions")
         .insert(insertPayload)
-        .select("id, clerk_user_id, type, question_text, student_year, created_at")
+        .select("id, clerk_user_id, type, question_text, student_year, created_at, is_anonymous")
         .single();
 
       if (insertErr) {
         res.status(500).json({ error: "DB insert failed", details: insertErr.message });
         return;
       }
+
+      const authorName = isAnonymous ? "Anonymous" : `${userData?.first_name ?? ""} ${userData?.last_name ?? ""}`.trim() || "User";
+      const authorAvatarUrl = isAnonymous ? null : (userData?.avatar_url ?? null);
 
       // Return in the same shape your UI expects
       res.status(200).json({
@@ -134,6 +149,8 @@ export default async function handler(req: any, res: any) {
           upvotes: 0,
           comments: [],
           ...(inserted.student_year ? { studentYear: String(inserted.student_year) } : {}),
+          authorName,
+          authorAvatarUrl,
         },
       });
       return;

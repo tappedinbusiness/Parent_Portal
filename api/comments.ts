@@ -36,6 +36,13 @@ async function requireClerkUserId(req: any): Promise<string> {
   return sub;
 }
 
+function buildName(first: any, last: any) {
+  const f = typeof first === "string" ? first : "";
+  const l = typeof last === "string" ? last : "";
+  const full = `${f} ${l}`.trim();
+  return full || "User";
+}
+
 export default async function handler(req: any, res: any) {
   try {
     const supabase = createClient(
@@ -54,7 +61,7 @@ export default async function handler(req: any, res: any) {
 
       const { data, error } = await supabase
         .from("comments")
-        .select("id, question_id, clerk_user_id, text, created_at")
+        .select("id, question_id, clerk_user_id, text, created_at, upvotes")
         .eq("question_id", questionId)
         .order("created_at", { ascending: true });
 
@@ -63,13 +70,49 @@ export default async function handler(req: any, res: any) {
         return;
       }
 
-      const comments = (data ?? []).map((row: any) => ({
-        id: String(row.id),
-        text: String(row.text ?? ""),
-        timestamp: row.created_at ? new Date(row.created_at) : new Date(),
-        upvotes: 0,
-        userId: row.clerk_user_id ? String(row.clerk_user_id) : "anonymous",
-      }));
+      const userIds = Array.from(
+        new Set((data ?? []).map((r: any) => r.clerk_user_id).filter(Boolean))
+      );
+
+      let userMap: Record<string, { name: string; avatar_url: string | null }> = {};
+
+      if (userIds.length > 0) {
+        const { data: usersData, error: usersErr } = await supabase
+          .from("users")
+          .select("clerk_user_id, first_name, last_name, avatar_url, post_anonymously")
+          .in("clerk_user_id", userIds);
+
+        const isAnon = (u: any) => u.post_anonymously ?? false;
+
+
+        //LAST LEFT OFF HERE!!!!
+        //NEXT STEP IS Step (E) in ChatGPT instructions
+
+
+        if (!usersErr && usersData) {
+          userMap = Object.fromEntries(
+            usersData.map((u: any) => [
+              u.clerk_user_id,
+              { name: isAnon ? "Anonymous" : buildName(u.first_name, u.last_name),
+                avatar_url: isAnon ? null : u.avatar_url ?? null },
+            ])
+          );
+        }
+      }
+
+      const comments = (data ?? []).map((row: any) => {
+        const profile = row.clerk_user_id ? userMap[row.clerk_user_id] : null;
+
+        return {
+          id: String(row.id),
+          text: String(row.text ?? ""),
+          timestamp: row.created_at ? new Date(row.created_at) : new Date(),
+          upvotes: row.upvotes ?? 0,
+          userId: row.clerk_user_id ? String(row.clerk_user_id) : "anonymous",
+          authorName: row.clerk_user_id ? (profile?.name ?? "User") : "Anonymous",
+          authorAvatarUrl: row.clerk_user_id ? (profile?.avatar_url ?? null) : null,
+        };
+      });
 
       res.status(200).json({ comments });
       return;
@@ -87,7 +130,6 @@ export default async function handler(req: any, res: any) {
         return;
       }
 
-      // Signed-in only
       let clerkUserId: string;
       try {
         clerkUserId = await requireClerkUserId(req);
@@ -96,14 +138,30 @@ export default async function handler(req: any, res: any) {
         return;
       }
 
+      // Lookup author profile (best-effort)
+      let authorName = "User";
+      let authorAvatarUrl: string | null = null;
+
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("first_name, last_name, avatar_url, post_anonymously")
+        .eq("clerk_user_id", clerkUserId)
+        .maybeSingle();
+
+      const isAnonymous = (userRow as any)?.post_anonymously ?? false;
+
+      authorName = isAnonymous ? "Anonymous" : buildName(userRow.first_name, userRow.last_name);
+      authorAvatarUrl = isAnonymous ? null : (userRow.avatar_url ?? null);
+
       const { data: inserted, error: insertErr } = await supabase
         .from("comments")
         .insert({
           question_id: questionId,
           clerk_user_id: clerkUserId,
           text: text.trim(),
+          is_anonymous: isAnonymous,
         })
-        .select("id, question_id, clerk_user_id, text, created_at")
+        .select("id, question_id, clerk_user_id, text, created_at, upvotes")
         .single();
 
       if (insertErr) {
@@ -116,8 +174,10 @@ export default async function handler(req: any, res: any) {
           id: String(inserted.id),
           text: String(inserted.text ?? ""),
           timestamp: inserted.created_at ? new Date(inserted.created_at) : new Date(),
-          upvotes: 0,
+          upvotes: inserted.upvotes ?? 0,
           userId: inserted.clerk_user_id ? String(inserted.clerk_user_id) : "anonymous",
+          authorName,
+          authorAvatarUrl,
         },
       });
       return;

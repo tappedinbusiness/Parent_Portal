@@ -114,8 +114,10 @@ const ForumItem: React.FC<{ question: Question;
   onToggleLike: (id: string) => void; likedIds?: string[]; 
   onAddComment: (id: string, text: string) => void; likedCommentIds?: string[]; 
   onLoadComments?: (questionId: string) => void; 
-  onToggleCommentLike?: (commentId: string, questionId: string) => void; }> = 
-  ({ question, onToggleLike, likedIds = [], onAddComment, likedCommentIds = [], onToggleCommentLike, onLoadComments }) => {
+  onToggleCommentLike?: (commentId: string, questionId: string) => void; 
+  onToggleBookmark?: (questionId: string) => void;  bookmarkedIds?: string[];
+  }> = 
+  ({ question, onToggleLike, likedIds = [], onAddComment, likedCommentIds = [], onToggleCommentLike, onLoadComments, onToggleBookmark, bookmarkedIds}) => {
 
   const formattedDate = question.timestamp
     ? new Date(question.timestamp).toLocaleString()
@@ -125,8 +127,10 @@ const ForumItem: React.FC<{ question: Question;
   const htmlAnswer = question.aiAnswer ? marked(question.aiAnswer) : '';
   const isDiscussion = question.type === 'discussion';
 
+  const commentsSafe = question.comments ?? [];
+
   // Sort comments by upvotes (desc), then by recency (timestamp desc) for display
-  const sortedComments = [...(question.comments ?? [])].sort((a, b) => {
+  const sortedComments = [...(commentsSafe?? [])].sort((a, b) => {
     const upA = a.upvotes ?? 0;
     const upB = b.upvotes ?? 0;
     if (upB !== upA) return upB - upA;
@@ -212,42 +216,88 @@ const ForumItem: React.FC<{ question: Question;
               <span>{likedIds.includes(question.id) ? 'Liked' : 'Like'} ({question.upvotes})</span>
             </button>
           </SignedIn>
+
+          {/* Bookmark button */}
+          <SignedOut>
+            <SignInButton mode="redirect">
+              <button className="flex items-center space-x-2 text-sm font-medium transition-colors p-2 rounded-md focus:outline-none text-gray-600 hover:text-red-800 hover:bg-gray-100">
+                <span className="text-lg leading-none">☆</span>
+                <span>Bookmark</span>
+              </button>
+            </SignInButton>
+          </SignedOut>
+
+          <SignedIn>
+            <button
+              onClick={() => onToggleBookmark?.(question.id)}
+              aria-pressed={(bookmarkedIds ?? []).includes(question.id)}
+              className={`ml-2 flex items-center space-x-2 text-sm font-medium transition-colors p-2 rounded-md focus:outline-none ${
+                (bookmarkedIds ?? []).includes(question.id)
+                  ? 'text-yellow-700 bg-yellow-50'
+                  : 'text-gray-600 hover:text-red-800 hover:bg-gray-100'
+              }`}
+            >
+              <span className="text-lg leading-none">{(bookmarkedIds ?? []).includes(question.id) ? '★' : '☆'}</span>
+              <span>{(bookmarkedIds ?? []).includes(question.id) ? 'Bookmarked' : 'Bookmark'}</span>
+            </button>
+          </SignedIn>
         </div>
 
-        <span className="text-sm text-gray-500 ml-4">{formattedDate}</span>
+        <span className="text-sm text-gray-500 ml-4">Last Verified: {formattedDate}</span>
       </div>
       
       <div className="mt-4 border-t pt-4">
-        <h4 className="text-md font-semibold text-gray-700 mb-3">Comments ({question.comments.length})</h4>
+        <h4 className="text-md font-semibold text-gray-700 mb-3">Comments ({commentsSafe.length})</h4>
         <div className="space-y-4">
-            {sortedComments.map(comment => (
-                 <div key={comment.id} className="text-sm p-3 bg-gray-50 rounded-lg border">
-                     <p className="text-gray-800">{comment.text}</p>
-                     <div className="flex items-center justify-between mt-2">
-                       <p className="text-xs text-gray-400">{new Date(comment.timestamp).toLocaleString()}</p>
-                       <SignedOut>
-                         <SignInButton mode="redirect">
-                           <button className="ml-3 flex items-center space-x-2 text-xs font-medium transition-colors p-1 rounded text-gray-500 hover:text-green-700 hover:bg-gray-100">
-                             <img src={fbLikeIcon} alt="Like comment" className="w-4 h-4 object-contain" />
-                             <span>{comment.upvotes ?? 0}</span>
-                           </button>
-                         </SignInButton>
-                       </SignedOut>
+          {sortedComments.map(comment => (
+            <div key={comment.id} className="text-sm p-3 bg-gray-50 rounded-lg border">
+              <div className="flex items-center gap-2 mb-2">
+                {(comment as any).authorAvatarUrl ? (
+                  <img
+                    src={(comment as any).authorAvatarUrl}
+                    alt={(comment as any).authorName || 'User'}
+                    className="w-6 h-6 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-gray-200" />
+                )}
+                <div className="text-sm font-medium text-gray-800">
+                  {(comment as any).authorName || 'Anonymous'}
+                </div>
+              </div>
 
-                       <SignedIn>
-                         <button
-                           onClick={() => onToggleCommentLike?.(comment.id, question.id)}
-                           aria-pressed={likedCommentIds.includes(comment.id)}
-                           className={`ml-3 flex items-center space-x-2 text-xs font-medium transition-colors p-1 rounded ${likedCommentIds.includes(comment.id) ? 'text-green-700 bg-green-50' : 'text-gray-500 hover:text-green-700 hover:bg-gray-100'}`}
-                         >
-                           <img src={fbLikeIcon} alt="Like comment" className="w-4 h-4 object-contain" />
-                           <span>{comment.upvotes ?? 0}</span>
-                         </button>
-                       </SignedIn>
-                 </div>
-             </div>
-            ))}
-            {question.comments.length === 0 && (
+              <p className="text-gray-800">{comment.text}</p>
+
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-gray-400">{new Date(comment.timestamp).toLocaleString()}</p>
+
+                <SignedOut>
+                  <SignInButton mode="redirect">
+                    <button className="ml-3 flex items-center space-x-2 text-xs font-medium transition-colors p-1 rounded text-gray-500 hover:text-green-700 hover:bg-gray-100">
+                      <img src={fbLikeIcon} alt="Like comment" className="w-4 h-4 object-contain" />
+                      <span>{comment.upvotes ?? 0}</span>
+                    </button>
+                  </SignInButton>
+                </SignedOut>
+
+                <SignedIn>
+                  <button
+                    onClick={() => onToggleCommentLike?.(comment.id, question.id)}
+                    aria-pressed={likedCommentIds.includes(comment.id)}
+                    className={`ml-3 flex items-center space-x-2 text-xs font-medium transition-colors p-1 rounded ${
+                      likedCommentIds.includes(comment.id)
+                        ? 'text-green-700 bg-green-50'
+                        : 'text-gray-500 hover:text-green-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <img src={fbLikeIcon} alt="Like comment" className="w-4 h-4 object-contain" />
+                    <span>{comment.upvotes ?? 0}</span>
+                  </button>
+                </SignedIn>
+              </div>
+            </div>
+          ))}
+            {commentsSafe.length === 0 && (
                 <p className="text-sm text-gray-500">No comments yet.</p>
             )}
         </div>

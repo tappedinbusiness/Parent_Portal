@@ -4,36 +4,90 @@ import type { Question, StudentYear, Comment } from './types';
 import Header from './components/Header';
 import QuestionForm from './components/QuestionForm';
 import DiscussionForm from './components/DiscussionForm';
-import ForumDisplay from './components/ForumDisplay';
 import StudentYearSelect from './components/StudentYearSelect';
 import Account from './components/Account';
-import ForumFilter from './components/ForumFilter';
 import { v4 as uuidv4 } from 'uuid';
 import alabamaLogo from './assets/Alabama_Crimson_Tide_logo.svg.png';
 import groupIcon from './assets/group-of-people-svgrepo-com.svg';
 import { SignedIn, useAuth } from '@clerk/clerk-react';
 
-type Page = 'home' | 'forum' | 'account';
+import ForumAiPage from './components/ForumAiPage';
+import ForumDiscussionPage from './components/ForumDiscussionPage';
+
 type ForumView = 'discussion' | 'ai';
 
 const App: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
 
-  const [page, setPage] = useState<Page>('home');
+  const [page, setPage] = useState<'home' | 'forum_ai' | 'forum_discussion' | 'account'>('home');
   const [studentYear, setStudentYear] = useState<StudentYear | 'All'>('All');
   const [pinnedQuestionIds, setPinnedQuestionIds] = useState<string[]>([]);
-  const [forumViewFilter, setForumViewFilter] = useState<ForumView>('discussion');
   const [likedQuestionIds, setLikedQuestionIds] = useState<string[]>([]);
   const [likedCommentIds, setLikedCommentIds] = useState<string[]>([]);
-  const [featuredQuestion, setFeaturedQuestion] = useState<Question | null>(null);
+
+  //const [featuredQuestion, setFeaturedQuestion] = useState<Question | null>(null);
+  const [featuredAiQuestion, setFeaturedAiQuestion] = useState<Question | null>(null);
+  const [selectedDiscussion, setSelectedDiscussion] = useState<Question | null>(null);
+
+  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
 
   const { isSignedIn, getToken } = useAuth();
 
+  const activeForumType: ForumView | null =
+  page === 'forum_ai' ? 'ai' :
+  page === 'forum_discussion' ? 'discussion' :
+  null;
+
   useEffect(() => {
-  if (page === "forum") {
-    loadQuestionsFromDb(forumViewFilter); // forumViewFilter is 'ai' | 'discussion'
+  if (page === "forum_ai") {
+    loadQuestionsFromDb('ai');
+  } 
+  if (page === "forum_discussion") {
+    loadQuestionsFromDb('discussion');
   }
-  }, [page, forumViewFilter]);
+  loadMyBookmarks();
+  }, [page, isSignedIn]);
+
+  useEffect(() => {
+    const syncUser = async () => {
+      if (!isSignedIn) return;
+
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch("/api/me", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ studentYear }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Failed to sync user:", data);
+        return;
+      }
+
+      // Optional: store user profile in state if you want to display it later
+      // setCurrentUserProfile(data.user);
+    };
+
+    syncUser();
+  }, [isSignedIn, studentYear]);
+
+  const openQuestionInForum = (q: Question) => {
+    if (q.type === 'ai') {
+      setFeaturedAiQuestion(q);
+      setPage('forum_ai');
+    } else {
+      setSelectedDiscussion(q);
+      setPage('forum_discussion');
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
 
   const loadQuestionsFromDb = async (type: "ai" | "discussion") => {
     try {
@@ -48,6 +102,29 @@ const App: React.FC = () => {
       setQuestions(data.questions);
     } catch (err) {
       console.error("Failed to load questions:", err);
+    }
+  };
+
+  const loadMyBookmarks = async () => {
+    try {
+      if (!isSignedIn) {
+        setBookmarkedIds([]);
+        return;
+      }
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch("/api/bookmarks?limit=200", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Failed to load bookmarks:", data);
+        return;
+      }
+      setBookmarkedIds((data.bookmarks ?? []).map((q: any) => q.id));
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -116,19 +193,24 @@ const App: React.FC = () => {
         );
       }
 
-      setFeaturedQuestion((prev) => ({
+      setFeaturedAiQuestion((prev) => ({
         ...(prev ?? {}),
         id: localId,
+        userId: prev?.userId ?? (isSignedIn ? "signed-in" : "anonymous"),
+        type: "ai",
         questionText: questionText,
-        aiAnswer: aiResponse.answer || prev?.aiAnswer,
+        aiAnswer: aiResponse.answer || prev?.aiAnswer || "No response generated.",
         status: aiResponse.status,
         timestamp: new Date(),
+        upvotes: prev?.upvotes ?? 0,
+        comments: prev?.comments ?? [],
+        ...(studentYear !== "All" ? { studentYear } : {}),
       }));
 
-
       // Navigate to forum either way (new or duplicate)
-      setPage("forum");
-      setForumViewFilter("ai");
+      setSelectedDiscussion(null);
+
+      setPage("forum_ai");
       window.scrollTo({ top: 0, behavior: "smooth" });
 
       return true;
@@ -173,11 +255,14 @@ const App: React.FC = () => {
 
       const created = data.question as Question;
 
+      setSelectedDiscussion(created);
+
+      setFeaturedAiQuestion(null);
+
       // Insert into local state so it shows instantly
       setQuestions((prev) => [created, ...prev]);
 
-      setPage("forum");
-      setForumViewFilter("discussion");
+      setPage("forum_discussion");
       window.scrollTo({ top: 0, behavior: "smooth" });
 
       return true;
@@ -190,7 +275,7 @@ const App: React.FC = () => {
 
   const handleAddComment = async (questionId: string, commentText: string) => {
     try{
-      if(!SignedIn){
+      if(!isSignedIn){
         alert("You must be signed in to add a comment.");
         return;
       }
@@ -247,9 +332,14 @@ const App: React.FC = () => {
         prev.map((q) => (q.id === questionId ? { ...q, comments: data.comments } : q))
       );
 
-      setFeaturedQuestion((prev) =>
+      setFeaturedAiQuestion((prev) =>
         prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
       );
+
+      setSelectedDiscussion((prev) =>
+        prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+      );
+
     } catch (err) {
       console.error("Failed to load comments:", err);
     }
@@ -288,8 +378,12 @@ const App: React.FC = () => {
         prev.map((q) => (q.id === questionId ? { ...q, upvotes: data.upvotes } : q))
       );
 
-      setFeaturedQuestion((prev) =>
-        prev && prev.id === questionId ? { ...prev, upvotes: data.upvotes } : prev
+      setFeaturedAiQuestion((prev) =>
+        prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+      );
+
+      setSelectedDiscussion((prev) =>
+        prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
       );
     } catch (e) {
       console.error(e);
@@ -333,40 +427,70 @@ const App: React.FC = () => {
       });
 
       setQuestions((prev) => prev.map((q) => (q.id === questionId ? updateQuestionComments(q) : q)));
-      setFeaturedQuestion((prev) =>
-        prev && prev.id === questionId ? updateQuestionComments(prev) : prev
+      setFeaturedAiQuestion((prev) =>
+          prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+        );
+
+        setSelectedDiscussion((prev) =>
+          prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+        );
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleBookmark = async (questionId: string) => {
+    try {
+      if (!isSignedIn) {
+        alert("Please sign in to bookmark posts.");
+        return;
+      }
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch("/api/bookmarks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ questionId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Bookmark toggle failed:", data);
+        return;
+      }
+
+      setBookmarkedIds((prev) =>
+        data.bookmarked ? [...prev, questionId] : prev.filter((id) => id !== questionId)
       );
     } catch (e) {
       console.error(e);
     }
   };
   
-  const pinnedQuestions = useMemo(() => {
-    return pinnedQuestionIds
-      .map(id => questions.find(q => q.id === id))
-      .filter((q): q is Question => !!q)
-      .filter(q => q.type === forumViewFilter);
-  }, [questions, pinnedQuestionIds, forumViewFilter]);
-
   const { yearSpecificQuestions, allQuestions } = useMemo(() => {
-    const sorted = [...questions]
-        .filter(q => !pinnedQuestionIds.includes(q.id))
-        .filter(q => q.type === forumViewFilter)
-        .sort((a, b) => {
-          // sort by upvotes desc, then by timestamp desc
-          if ((b.upvotes || 0) !== (a.upvotes || 0)) return (b.upvotes || 0) - (a.upvotes || 0);
-          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-        });
+    const base = [...questions].filter(q => !pinnedQuestionIds.includes(q.id));
+
+    const filteredByPage =
+      activeForumType ? base.filter(q => q.type === activeForumType) : base;
+
+    const sorted = filteredByPage.sort((a, b) => {
+      if ((b.upvotes || 0) !== (a.upvotes || 0)) return (b.upvotes || 0) - (a.upvotes || 0);
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
 
     if (studentYear === 'All') {
-        return { yearSpecificQuestions: [], allQuestions: sorted };
+      return { yearSpecificQuestions: [], allQuestions: sorted };
     }
-    
+
     const yearQuestions = sorted.filter(q => q.studentYear === studentYear);
     const top15 = yearQuestions.slice(0, 15);
-    
+
     return { yearSpecificQuestions: top15, allQuestions: sorted };
-  }, [questions, studentYear, pinnedQuestionIds, forumViewFilter]);
+  }, [questions, studentYear, pinnedQuestionIds, activeForumType]);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
@@ -446,29 +570,41 @@ const App: React.FC = () => {
                 </div>
              </div>
         )}
-        {page === 'forum' && (
-          <>
-            <ForumFilter 
-              currentView={forumViewFilter}
-              onViewChange={setForumViewFilter}
-            />
-            <ForumDisplay 
-                featuredQuestion={featuredQuestion}
-                yearSpecificQuestions={yearSpecificQuestions}
-                allQuestions={allQuestions}
-                onToggleLike={handleToggleLike}
-                likedIds={likedQuestionIds}
-                likedCommentIds={likedCommentIds}
-                onToggleCommentLike={handleToggleCommentLike}
-                onLoadComments={loadCommentsForQuestion}
-                onAddComment={handleAddComment}
-                selectedYear={studentYear}
-                currentView={forumViewFilter}
-            />
-          </>
+        {page === 'forum_ai' && (
+          <ForumAiPage
+            featuredQuestion={featuredAiQuestion}
+            yearSpecificQuestions={yearSpecificQuestions}
+            allQuestions={allQuestions}
+            onToggleLike={handleToggleLike}
+            onAddComment={handleAddComment}
+            onToggleBookmark={handleToggleBookmark}
+            bookmarkedIds={bookmarkedIds}
+            likedIds={likedQuestionIds}
+            likedCommentIds={likedCommentIds}
+            onToggleCommentLike={handleToggleCommentLike}
+            onLoadComments={loadCommentsForQuestion}
+            selectedYear={studentYear}
+          />
+        )}
+
+        {page === 'forum_discussion' && (
+          <ForumDiscussionPage
+            featuredQuestion={selectedDiscussion}
+            yearSpecificQuestions={yearSpecificQuestions}
+            allQuestions={allQuestions}
+            onToggleLike={handleToggleLike}
+            onAddComment={handleAddComment}
+            onToggleBookmark={handleToggleBookmark}
+            bookmarkedIds={bookmarkedIds}
+            likedIds={likedQuestionIds}
+            likedCommentIds={likedCommentIds}
+            onToggleCommentLike={handleToggleCommentLike}
+            onLoadComments={loadCommentsForQuestion}
+            selectedYear={studentYear}
+          />
         )}
         {page === 'account' && (
-          <Account />
+          <Account onOpenQuestion={openQuestionInForum}/>
         )}
       </main>
     </div>

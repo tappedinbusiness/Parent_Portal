@@ -22,4 +22,7 @@ export interface Question {
   upvotes: number;
   comments: Comment[];
   studentYear?: StudentYear;
+  authorName?: string;
+  authorAvatarUrl?: string | null;
+  isAnonymous?: boolean;
 }
