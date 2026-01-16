@@ -24,6 +24,7 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({
   likedIds,
   likedCommentIds = [],
   onToggleCommentLike,
+  onLoadComments,
   selectedYear,
   currentView
 }) => {
@@ -83,6 +84,7 @@ const ForumDisplay: React.FC<ForumDisplayProps> = ({
                 onAddComment={onAddComment}
                 likedCommentIds={likedCommentIds}
                 onToggleCommentLike={onToggleCommentLike}
+                onLoadComments={onLoadComments}
               />
             ))}
           </div>

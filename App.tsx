@@ -11,7 +11,7 @@ import ForumFilter from './components/ForumFilter';
 import { v4 as uuidv4 } from 'uuid';
 import alabamaLogo from './assets/Alabama_Crimson_Tide_logo.svg.png';
 import groupIcon from './assets/group-of-people-svgrepo-com.svg';
-import { useAuth } from '@clerk/clerk-react';
+import { SignedIn, useAuth } from '@clerk/clerk-react';
 
 type Page = 'home' | 'forum' | 'account';
 type ForumView = 'discussion' | 'ai';
@@ -30,12 +30,14 @@ const App: React.FC = () => {
   const { isSignedIn, getToken } = useAuth();
 
   useEffect(() => {
-    loadAiQuestionsFromDb();
-  }, []);
+  if (page === "forum") {
+    loadQuestionsFromDb(forumViewFilter); // forumViewFilter is 'ai' | 'discussion'
+  }
+  }, [page, forumViewFilter]);
 
-  const loadAiQuestionsFromDb = async () => {
+  const loadQuestionsFromDb = async (type: "ai" | "discussion") => {
     try {
-      const res = await fetch("/api/questions?type=ai&limit=50");
+      const res = await fetch(`/api/questions?type=${encodeURIComponent(type)}&limit=50`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -43,13 +45,11 @@ const App: React.FC = () => {
         return;
       }
 
-      // data.questions will match your Question shape (timestamp is a Date already)
       setQuestions(data.questions);
     } catch (err) {
       console.error("Failed to load questions:", err);
     }
   };
-
 
   const handleAiQuestionSubmit = async (questionText: string): Promise<boolean> => {
     try {
@@ -139,7 +139,6 @@ const App: React.FC = () => {
     }
   };
 
-
   const handleDiscussionSubmit = async (topic: string): Promise<boolean> => {
     try {
       const moderationResult = await moderateDiscussionTopic();
@@ -149,23 +148,38 @@ const App: React.FC = () => {
         return false;
       }
 
-      const newDiscussion: Question = {
-        id: uuidv4(),
-        userId: 'anonymous',
-        type: 'discussion',
-        questionText: topic,
-        timestamp: new Date(),
-        upvotes: 0,
-        comments: [],
-      };
-      
-      if (studentYear !== 'All') {
-          newDiscussion.studentYear = studentYear;
+      const token = isSignedIn ? await getToken() : null;
+
+      const res = await fetch("/api/questions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          type: "discussion",
+          topic,
+          studentYear,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Failed to submit discussion:", data);
+        alert("Failed to submit discussion.");
+        return false;
       }
 
-      setQuestions(prevQuestions => [newDiscussion, ...prevQuestions]);
-      setPage('forum');
-      setForumViewFilter('discussion');
+      const created = data.question as Question;
+
+      // Insert into local state so it shows instantly
+      setQuestions((prev) => [created, ...prev]);
+
+      setPage("forum");
+      setForumViewFilter("discussion");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
       return true;
     } catch (err) {
       console.error("Failed to submit discussion:", err);
@@ -174,58 +188,157 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAddComment = async (questionId: string, commentText: string) => {
+    try{
+      if(!SignedIn){
+        alert("You must be signed in to add a comment.");
+        return;
+      }
 
-  // Toggle like for a question: add/remove from liked list and update upvote count
-  const handleToggleLike = (questionId: string) => {
-    setQuestions(prevQuestions =>
-      prevQuestions.map(q => {
-        if (q.id !== questionId) return q;
-        const isLiked = likedQuestionIds.includes(questionId);
-        const newUpvotes = isLiked ? Math.max(0, q.upvotes - 1) : q.upvotes + 1;
-        return { ...q, upvotes: newUpvotes };
-      })
-    );
+      const token = await getToken();
+      if(!token){
+        alert("Please sign in again.")
+        return;
+      }
 
-    setLikedQuestionIds(prev =>
-      prev.includes(questionId) ? prev.filter(id => id !== questionId) : [...prev, questionId]
-    );
+      const res = await fetch("/api/comments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ questionId, text: commentText }),
+      });
+
+      const data = await res.json();
+
+      if(!res.ok){
+        console.error("Failed to add comment:", data);
+        alert("Failed to add comment. Please try again.");
+        return;
+      }
+
+      const newComment: Comment = data.comment;
+      
+      setQuestions(prevQuestions =>
+        prevQuestions.map(q =>
+          q.id === questionId
+            ? { ...q, comments: [...q.comments, newComment] }
+            : q
+        )
+      );
+
+    } catch(err){      console.error("Failed to add comment:", err);
+      alert("An error occurred while adding your comment.");
+      return;
+    }
   };
 
-  const handleAddComment = (questionId: string, commentText: string) => {
-    const newComment: Comment = {
-      id: uuidv4(),
-      text: commentText,
-      timestamp: new Date(),
-      upvotes: 0
-    };
+  const loadCommentsForQuestion = async (questionId: string) => {
+    try {
+      const res = await fetch(`/api/comments?questionId=${encodeURIComponent(questionId)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Failed to load comments:", data);
+        return;
+      }
 
-    setQuestions(prevQuestions =>
-      prevQuestions.map(q =>
-        q.id === questionId
-          ? { ...q, comments: [...q.comments, newComment] }
-          : q
-      )
-    );
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === questionId ? { ...q, comments: data.comments } : q))
+      );
+
+      setFeaturedQuestion((prev) =>
+        prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+      );
+    } catch (err) {
+      console.error("Failed to load comments:", err);
+    }
   };
 
-  // Toggle like for a comment
-  const handleToggleCommentLike = (commentId: string, questionId: string) => {
-    setQuestions(prevQuestions =>
-      prevQuestions.map(q => {
-        if (q.id !== questionId) return q;
-        return {
-          ...q,
-          comments: q.comments.map(c => {
-            if (c.id !== commentId) return c;
-            const isLiked = likedCommentIds.includes(commentId);
-            const newUpvotes = isLiked ? Math.max(0, (c.upvotes || 0) - 1) : (c.upvotes || 0) + 1;
-            return { ...c, upvotes: newUpvotes };
-          })
-        };
-      })
-    );
+  const handleToggleLike = async (questionId: string) => {
+    try {
+      if (!isSignedIn) {
+        alert("Please sign in to like posts.");
+        return;
+      }
+      const token = await getToken();
+      if (!token) return;
 
-    setLikedCommentIds(prev => prev.includes(commentId) ? prev.filter(id => id !== commentId) : [...prev, commentId]);
+      const res = await fetch("/api/likes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetType: "question", targetId: questionId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Like failed:", data);
+        return;
+      }
+
+      // Update local likedIds + upvote count
+      setLikedQuestionIds((prev) =>
+        data.liked ? [...prev, questionId] : prev.filter((id) => id !== questionId)
+      );
+
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === questionId ? { ...q, upvotes: data.upvotes } : q))
+      );
+
+      setFeaturedQuestion((prev) =>
+        prev && prev.id === questionId ? { ...prev, upvotes: data.upvotes } : prev
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleCommentLike = async (commentId: string, questionId: string) => {
+    try {
+      if (!isSignedIn) {
+        alert("Please sign in to like comments.");
+        return;
+      }
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch("/api/likes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetType: "comment", targetId: commentId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Comment like failed:", data);
+        return;
+      }
+
+      setLikedCommentIds((prev) =>
+        data.liked ? [...prev, commentId] : prev.filter((id) => id !== commentId)
+      );
+
+      // update comment upvotes inside the question’s comments
+      const updateQuestionComments = (q: any) => ({
+        ...q,
+        comments: (q.comments ?? []).map((c: any) =>
+          c.id === commentId ? { ...c, upvotes: data.upvotes } : c
+        ),
+      });
+
+      setQuestions((prev) => prev.map((q) => (q.id === questionId ? updateQuestionComments(q) : q)));
+      setFeaturedQuestion((prev) =>
+        prev && prev.id === questionId ? updateQuestionComments(prev) : prev
+      );
+    } catch (e) {
+      console.error(e);
+    }
   };
   
   const pinnedQuestions = useMemo(() => {
@@ -254,7 +367,6 @@ const App: React.FC = () => {
     
     return { yearSpecificQuestions: top15, allQuestions: sorted };
   }, [questions, studentYear, pinnedQuestionIds, forumViewFilter]);
-
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
@@ -348,6 +460,7 @@ const App: React.FC = () => {
                 likedIds={likedQuestionIds}
                 likedCommentIds={likedCommentIds}
                 onToggleCommentLike={handleToggleCommentLike}
+                onLoadComments={loadCommentsForQuestion}
                 onAddComment={handleAddComment}
                 selectedYear={studentYear}
                 currentView={forumViewFilter}

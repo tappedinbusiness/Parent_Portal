@@ -58,50 +58,65 @@ const StudentYearBadge: React.FC<{ year?: StudentYear }> = ({ year }) => {
     );
 };
 
-const CommentForm: React.FC<{ onAddComment: (text: string) => void }> = ({ onAddComment }) => {
-    const [commentText, setCommentText] = useState('');
+const CommentForm: React.FC<{
+  onAddComment: (text: string) => void;
+  onOpen?: () => void;
+  }> = ({ onAddComment, onOpen }) => {
+  const [commentText, setCommentText] = useState('');
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!commentText.trim()) return;
-        onAddComment(commentText);
-        setCommentText('');
-    };
+  React.useEffect(() => {
+    onOpen?.();
+    // only run once when the form mounts (when comments UI opens)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    return (
-        <>
-          <SignedOut>
-            <div className="p-3 bg-white rounded-md border border-gray-200 text-sm">
-              <p className="text-gray-700 mb-2">You must be signed in to post comments.</p>
-              <SignInButton mode="redirect">
-                <button className="px-3 py-2 bg-red-800 text-white rounded-md">Sign In</button>
-              </SignInButton>
-            </div>
-          </SignedOut>
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+    onAddComment(commentText);
+    setCommentText('');
+  };
 
-          <SignedIn>
-            <form onSubmit={handleSubmit} className="flex items-start space-x-3">
-                <textarea
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Add a comment..."
-                    className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-red-700 focus:border-red-700 text-sm"
-                    rows={2}
-                />
-                <button
-                    type="submit"
-                    className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 disabled:bg-gray-300"
-                    disabled={!commentText.trim()}
-                >
-                    Post
-                </button>
-            </form>
-          </SignedIn>
-        </>
-    );
+  return (
+    <>
+      <SignedOut>
+        <div className="p-3 bg-white rounded-md border border-gray-200 text-sm">
+          <p className="text-gray-700 mb-2">You must be signed in to post comments.</p>
+          <SignInButton mode="redirect">
+            <button className="px-3 py-2 bg-red-800 text-white rounded-md">Sign In</button>
+          </SignInButton>
+        </div>
+      </SignedOut>
+
+      <SignedIn>
+        <form onSubmit={handleSubmit} className="flex items-start space-x-3">
+          <textarea
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            placeholder="Add a comment..."
+            className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-red-700 focus:border-red-700 text-sm"
+            rows={2}
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 disabled:bg-gray-300"
+            disabled={!commentText.trim()}
+          >
+            Post
+          </button>
+        </form>
+      </SignedIn>
+    </>
+  );
 };
 
-const ForumItem: React.FC<{ question: Question; onToggleLike: (id: string) => void; likedIds?: string[]; onAddComment: (id: string, text: string) => void; likedCommentIds?: string[]; onToggleCommentLike?: (commentId: string, questionId: string) => void; }> = ({ question, onToggleLike, likedIds = [], onAddComment, likedCommentIds = [], onToggleCommentLike }) => {
+const ForumItem: React.FC<{ question: Question; 
+  onToggleLike: (id: string) => void; likedIds?: string[]; 
+  onAddComment: (id: string, text: string) => void; likedCommentIds?: string[]; 
+  onLoadComments?: (questionId: string) => void; 
+  onToggleCommentLike?: (commentId: string, questionId: string) => void; }> = 
+  ({ question, onToggleLike, likedIds = [], onAddComment, likedCommentIds = [], onToggleCommentLike, onLoadComments }) => {
+
   const formattedDate = question.timestamp
     ? new Date(question.timestamp).toLocaleString()
     : 'Just now';
@@ -111,7 +126,7 @@ const ForumItem: React.FC<{ question: Question; onToggleLike: (id: string) => vo
   const isDiscussion = question.type === 'discussion';
 
   // Sort comments by upvotes (desc), then by recency (timestamp desc) for display
-  const sortedComments = [...question.comments].sort((a, b) => {
+  const sortedComments = [...(question.comments ?? [])].sort((a, b) => {
     const upA = a.upvotes ?? 0;
     const upB = b.upvotes ?? 0;
     if (upB !== upA) return upB - upA;
@@ -237,7 +252,8 @@ const ForumItem: React.FC<{ question: Question; onToggleLike: (id: string) => vo
             )}
         </div>
         <div className="mt-4">
-            <CommentForm onAddComment={(text) => onAddComment(question.id, text)} />
+            <CommentForm onAddComment={(text) => onAddComment(question.id, text)} 
+              onOpen={() => onLoadComments?.(question.id)}/>
         </div>
       </div>
     </article>
