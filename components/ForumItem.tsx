@@ -147,9 +147,9 @@ const ForumItem: React.FC<{ question: Question;
 
             <div
               role="tooltip"
-              className="pointer-events-none absolute right-full top-0 transform translate-x-0 -translate-y-1/4 md:-translate-x-3 md:translate-y-0 w-64 md:w-72 bg-white border border-red-200 text-sm md:text-base text-gray-800 rounded-md p-3 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
+              className="pointer-events-none absolute right-full top-0 transform translate-x-0 -translate-y-1/4 md:-translate-x-3 md:translate-y-0 w-64 md:w-72 bg-white border border-blue-200 text-sm md:text-base text-gray-800 rounded-md p-3 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
             >
-              <div className="font-semibold text-red-800 mb-1">Discussions</div>
+              <div className="font-semibold text-blue-800 mb-1">Discussions</div>
               <div>Share opinions, experiences, and stories with other parents and students.</div>
               {/* Tooltip arrow */}
               <div className="absolute -right-3 top-4 w-3 h-3 bg-white border-t border-l border-red-200 transform rotate-45"></div>
@@ -159,12 +159,12 @@ const ForumItem: React.FC<{ question: Question;
       )}
 
       <div className="mb-4">
-        <p className="font-semibold text-gray-600">{isDiscussion ? 'Topic:' : 'Q:'}</p>
+        <p className="font-semibold text-blue-600">{isDiscussion ? 'Topic:' : 'Q:'}</p>
         <p className="ml-4 p-2 text-lg text-gray-900">{question.questionText}</p>
       </div>
 
       {!isDiscussion && question.aiAnswer && (
-        <div className="relative p-4 pr-16 bg-red-50 border-l-4 border-red-700 rounded-r-lg">
+        <div className="relative p-4 pr-16 bg-green-50 border-l-4 border-green-700 rounded-r-lg">
           {/* University endorsement badge in the corner with styled hover tooltip */}
           <div className="absolute top-3 right-3">
             <div className="group relative inline-block">
@@ -176,17 +176,17 @@ const ForumItem: React.FC<{ question: Question;
 
               <div
                 role="tooltip"
-                className="pointer-events-none absolute right-full top-0 transform translate-x-0 -translate-y-1/4 md:-translate-x-3 md:translate-y-0 w-64 md:w-72 bg-white border border-red-200 text-sm md:text-base text-gray-800 rounded-md p-3 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
+                className="pointer-events-none absolute right-full top-0 transform translate-x-0 -translate-y-1/4 md:-translate-x-3 md:translate-y-0 w-64 md:w-72 bg-white border border-green-200 text-sm md:text-base text-gray-800 rounded-md p-3 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
               >
-                <div className="font-semibold text-red-800 mb-1">University-backed answer</div>
+                <div className="font-semibold text-green-800 mb-1">University-backed answer</div>
                 <div>Real answers backed by university rules, official sources, and documented policies.</div>
                 {/* Tooltip arrow */}
-                <div className="absolute -right-3 top-4 w-3 h-3 bg-white border-t border-l border-red-200 transform rotate-45"></div>
+                <div className="absolute -right-3 top-4 w-3 h-3 bg-white border-t border-l border-green-200 transform rotate-45"></div>
               </div>
             </div>
           </div>
 
-          <p className="font-semibold text-red-900">A: (UA AI Assistant)</p>
+          <p className="font-semibold text-green-900">A: (UA AI Assistant)</p>
           <div 
             className="prose prose-sm max-w-none text-gray-800 ml-4 prose-a:text-blue-600 hover:prose-a:text-blue-800 hover:prose-a:underline"
             dangerouslySetInnerHTML={{ __html: htmlAnswer }}

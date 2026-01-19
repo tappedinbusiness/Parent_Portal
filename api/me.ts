@@ -79,7 +79,7 @@ export default async function handler(req: any, res: any) {
     const { data, error } = await supabase
       .from("users")
       .upsert(payload, { onConflict: "clerk_user_id" })
-      .select("id, clerk_user_id, first_name, last_name, avatar_url, student_year")
+      .select("id, clerk_user_id, first_name, last_name, avatar_url, student_year, post_anonymously")
       .single();
 
     if (error) {

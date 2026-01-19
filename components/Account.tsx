@@ -4,9 +4,11 @@ import type { Question } from '../types';
 
 interface AccountProps {
   onOpenQuestion: (q: Question) => void;
+  postAnonymously: boolean;
+  setPostAnonymously: (value: boolean) => void;
 }
 
-const Account: React.FC<AccountProps> = ({ onOpenQuestion }) => {
+const Account: React.FC<AccountProps> = ({ onOpenQuestion, postAnonymously, setPostAnonymously}) => {
 
   const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
@@ -16,6 +18,39 @@ const Account: React.FC<AccountProps> = ({ onOpenQuestion }) => {
   const [activityDiscussion, setActivityDiscussion] = React.useState<Question[]>([]);
   const [bookmarks, setBookmarks] = React.useState<Question[]>([]);
   const [error, setError] = React.useState<string | null>(null);
+
+  //const [postAnonymously, setPostAnonymously] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+
+  }, []);
+
+  const handleAnonToggle = async (checked: boolean) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch('/api/me/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ postAnonymously: checked }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error('Failed to update anonymous setting:', data);
+        return;
+      }
+
+      // ✅ update global state so App + future posts stay in sync
+      setPostAnonymously(data.postAnonymously);
+    } catch (err) {
+      console.error('Failed to update anonymous setting:', err);
+    }
+  };
 
   const fetchAllProfileData = React.useCallback(async () => {
     if (!isSignedIn) return;
@@ -151,6 +186,22 @@ const Account: React.FC<AccountProps> = ({ onOpenQuestion }) => {
             </div>
           </div>
         )}
+
+        <div className="mt-6 p-4 border rounded-lg bg-white">
+          <div className="text-lg font-semibold text-gray-800 mb-1">Posting privacy</div>
+            <div className="text-sm text-gray-600 mb-3">
+            When enabled, your discussions and comments will show as Anonymous.
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-gray-800">
+            <input
+            type="checkbox"
+            checked={postAnonymously}
+            onChange={(e) => handleAnonToggle(e.target.checked)}
+            />
+            Post and comment anonymously
+          </label>
+        </div>
 
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-gray-600">

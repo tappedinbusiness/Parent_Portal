@@ -88,7 +88,6 @@ export default async function handler(req: any, res: any) {
         //LAST LEFT OFF HERE!!!!
         //NEXT STEP IS Step (E) in ChatGPT instructions
 
-
         if (!usersErr && usersData) {
           userMap = Object.fromEntries(
             usersData.map((u: any) => [

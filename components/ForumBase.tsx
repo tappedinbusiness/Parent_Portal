@@ -85,7 +85,11 @@ const ForumBase: React.FC<ForumBaseProps> = ({
 
     return (
       <>
-        <h3 className="text-xl font-bold text-gray-700 mb-4 pb-2 border-b-2 border-red-200">
+        <h3
+          className={`text-xl font-bold text-gray-700 mb-4 pb-2 border-b-2 ${
+          currentView === 'ai' ? 'border-green-400' : 'border-blue-400'
+          }`}
+          >
           {title}
         </h3>
 
@@ -144,14 +148,13 @@ const ForumBase: React.FC<ForumBaseProps> = ({
     matchesQuery(featuredQuestion) &&
     matchesFilterMode(featuredQuestion);
 
-  const pageTitle = currentView === 'discussion' ? 'Discussions' : 'AI Answers';
+  const pageTitle = currentView === 'discussion' ? 'Discussions' : 'Verified UA Answers';
 
   return (
     <div>
       {shouldShowFeatured && (
         <div className="mb-8">
           <h3 className="text-xl font-bold text-gray-700 mb-4 pb-2 border-b-2 border-yellow-400">
-            {/* ⭐ Your Answer */}
             {(currentView === 'discussion' ? '📌 Selected Discussion' : '⭐ Verified Answer')}
           </h3>
           <div className="space-y-4">

@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from 'uuid';
 import alabamaLogo from './assets/Alabama_Crimson_Tide_logo.svg.png';
 import groupIcon from './assets/group-of-people-svgrepo-com.svg';
 import { SignedIn, useAuth } from '@clerk/clerk-react';
+import HomeFooter from './components/HomeFooter';
+import TermsPage from './components/TermsPage';
 
 import ForumAiPage from './components/ForumAiPage';
 import ForumDiscussionPage from './components/ForumDiscussionPage';
@@ -19,7 +21,7 @@ type ForumView = 'discussion' | 'ai';
 const App: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
 
-  const [page, setPage] = useState<'home' | 'forum_ai' | 'forum_discussion' | 'account'>('home');
+  const [page, setPage] = useState<'home' | 'forum_ai' | 'forum_discussion' | 'account' | 'terms'>('home');
   const [studentYear, setStudentYear] = useState<StudentYear | 'All'>('All');
   const [pinnedQuestionIds, setPinnedQuestionIds] = useState<string[]>([]);
   const [likedQuestionIds, setLikedQuestionIds] = useState<string[]>([]);
@@ -28,6 +30,8 @@ const App: React.FC = () => {
   //const [featuredQuestion, setFeaturedQuestion] = useState<Question | null>(null);
   const [featuredAiQuestion, setFeaturedAiQuestion] = useState<Question | null>(null);
   const [selectedDiscussion, setSelectedDiscussion] = useState<Question | null>(null);
+
+  const [postAnonymously, setPostAnonymously] = useState(false);
 
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
 
@@ -65,15 +69,16 @@ const App: React.FC = () => {
       });
 
       const data = await res.json();
+
+      console.log(data);
+
+      setPostAnonymously(!!data.user?.post_anonymously);
+
       if (!res.ok) {
         console.error("Failed to sync user:", data);
         return;
       }
-
-      // Optional: store user profile in state if you want to display it later
-      // setCurrentUserProfile(data.user);
     };
-
     syncUser();
   }, [isSignedIn, studentYear]);
 
@@ -87,7 +92,6 @@ const App: React.FC = () => {
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
 
   const loadQuestionsFromDb = async (type: "ai" | "discussion") => {
     try {
@@ -563,11 +567,11 @@ const App: React.FC = () => {
                     </div>
                     <h2 className="text-2xl font-bold text-gray-800 mb-2">Start a Discussion</h2>
                     <p className="text-gray-600 mb-4">
-                        Crowd-source real reviews, thoughts, and experiences from other parents on the platform. Discussions are community opinions and personal stories.
-
+                        Crowd-source real reviews, thoughts, and experiences from other parents on the platform. Discussions are community opinions and personal stories. To discover what other parents are saying, visit the Discussions page.
                     </p>
                     <DiscussionForm onSubmit={handleDiscussionSubmit} />
                 </div>
+                <HomeFooter onOpenTerms={() => setPage('terms')} />
              </div>
         )}
         {page === 'forum_ai' && (
@@ -604,8 +608,9 @@ const App: React.FC = () => {
           />
         )}
         {page === 'account' && (
-          <Account onOpenQuestion={openQuestionInForum}/>
-        )}
+          <Account onOpenQuestion={openQuestionInForum} postAnonymously={postAnonymously}
+            setPostAnonymously={setPostAnonymously}/>
+        )} {page === 'terms' && <TermsPage onBack={() => setPage('home')} />}
       </main>
     </div>
   );
