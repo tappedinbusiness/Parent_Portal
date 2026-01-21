@@ -40,11 +40,16 @@ export default async function handler(req: any, res: any) {
     }
 
     const clerkUserId = await requireClerkUserId(req);
-    const { postAnonymously } = req.body ?? {};
+    const { postAnonymously, studentYears } = req.body ?? {};
+
     if (typeof postAnonymously !== "boolean") {
-      res.status(400).json({ error: "Missing postAnonymously boolean" });
+      res.status(400).json({ error: "postAnonymously must be boolean" });
       return;
     }
+
+    const safeStudentYears: string[] = Array.isArray(studentYears)
+      ? studentYears.filter((s: any) => typeof s === "string" && s.trim().length > 0)
+      : [];
 
     const supabase = createClient(
       getEnv("SUPABASE_URL"),
@@ -54,9 +59,12 @@ export default async function handler(req: any, res: any) {
 
     const { data, error } = await supabase
       .from("users")
-      .update({ post_anonymously: postAnonymously })
+      .update({
+        post_anonymously: postAnonymously,
+        student_years: safeStudentYears,
+      })
       .eq("clerk_user_id", clerkUserId)
-      .select("post_anonymously")
+      .select("post_anonymously, student_years")
       .single();
 
     if (error) {
@@ -64,7 +72,10 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    res.status(200).json({ postAnonymously: data.post_anonymously });
+    res.status(200).json({
+      postAnonymously: data.post_anonymously ?? false,
+      studentYears: data.student_years ?? [],
+    });
   } catch (err: any) {
     res.status(401).json({ error: "Unauthorized", details: err?.message ?? String(err) });
   }

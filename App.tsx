@@ -9,7 +9,7 @@ import Account from './components/Account';
 import { v4 as uuidv4 } from 'uuid';
 import alabamaLogo from './assets/Alabama_Crimson_Tide_logo.svg.png';
 import groupIcon from './assets/group-of-people-svgrepo-com.svg';
-import { SignedIn, useAuth } from '@clerk/clerk-react';
+import { useAuth } from '@clerk/clerk-react';
 import HomeFooter from './components/HomeFooter';
 import TermsPage from './components/TermsPage';
 
@@ -22,7 +22,9 @@ const App: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
 
   const [page, setPage] = useState<'home' | 'forum_ai' | 'forum_discussion' | 'account' | 'terms'>('home');
-  const [studentYear, setStudentYear] = useState<StudentYear | 'All'>('All');
+  //const [studentYear, setStudentYear] = useState<StudentYear | 'All'>('All');
+  const [selectedYears, setSelectedYears] = useState<StudentYear[]>([]);
+
   const [pinnedQuestionIds, setPinnedQuestionIds] = useState<string[]>([]);
   const [likedQuestionIds, setLikedQuestionIds] = useState<string[]>([]);
   const [likedCommentIds, setLikedCommentIds] = useState<string[]>([]);
@@ -65,7 +67,7 @@ const App: React.FC = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ studentYear }),
+        body: JSON.stringify({ studentYears: selectedYears }),
       });
 
       const data = await res.json();
@@ -73,6 +75,9 @@ const App: React.FC = () => {
       console.log(data);
 
       setPostAnonymously(!!data.user?.post_anonymously);
+      if (selectedYears.length === 0) {
+        setSelectedYears(data.user?.studentYears ?? []);
+      }
 
       if (!res.ok) {
         console.error("Failed to sync user:", data);
@@ -80,7 +85,7 @@ const App: React.FC = () => {
       }
     };
     syncUser();
-  }, [isSignedIn, studentYear]);
+  }, [isSignedIn]);
 
   const openQuestionInForum = (q: Question) => {
     if (q.type === 'ai') {
@@ -141,7 +146,7 @@ const App: React.FC = () => {
       // New getAIAnswer expects an object (per the updated openaiService.ts)
       const aiResponse = await getAIAnswer({
         question: questionText,
-        studentYear,
+        studentYear: selectedYears.length === 1 ? selectedYears[0] : "All",
         token,
       });
 
@@ -167,6 +172,9 @@ const App: React.FC = () => {
       const alreadyInState = serverId
         ? questions.some((q) => q.id === serverId)
         : false;
+
+
+      const studentYear = selectedYears.length === 1 ? selectedYears[0] : "All";
 
       if (!alreadyInState) {
         const newQuestion: Question = {
@@ -245,7 +253,7 @@ const App: React.FC = () => {
         body: JSON.stringify({
           type: "discussion",
           topic,
-          studentYear,
+          studentYear: selectedYears.length === 1 ? selectedYears[0] : "All"
         }),
       });
 
@@ -486,6 +494,8 @@ const App: React.FC = () => {
       return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     });
 
+    const studentYear = selectedYears.length === 1 ? selectedYears[0] : "All";
+
     if (studentYear === 'All') {
       return { yearSpecificQuestions: [], allQuestions: sorted };
     }
@@ -494,27 +504,38 @@ const App: React.FC = () => {
     const top15 = yearQuestions.slice(0, 15);
 
     return { yearSpecificQuestions: top15, allQuestions: sorted };
-  }, [questions, studentYear, pinnedQuestionIds, activeForumType]);
+  }, [questions, selectedYears, pinnedQuestionIds, activeForumType]);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       <Header currentPage={page} setPage={setPage} />
       <main className="container mx-auto p-4 md:p-8 max-w-4xl">
-        {page !== 'account' && (
+          {page !== 'account' && isSignedIn && (
           <div className="mb-6">
-              <label htmlFor="global-student-year" className="block text-sm font-medium text-gray-700 mb-1">
-                  My Student's Year:
-              </label>
-              <div className="max-w-xs">
-                  <StudentYearSelect
-                      id="global-student-year"
-                      value={studentYear}
-                      onChange={setStudentYear}
-                      includeAll={true}
-                  />
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm font-semibold text-gray-800 mb-1">
+                My Student’s Year Preferences
               </div>
+
+              <div className="text-sm text-gray-700">
+                {selectedYears.length === 0 ? (
+                  <span>All Years</span>
+                ) : (
+                  <span>{selectedYears.join(', ')}</span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPage('account')}
+                className="mt-2 text-xs text-red-800 hover:underline"
+              >
+                To change these settings, head over to your account.
+              </button>
+            </div>
           </div>
         )}
+
 
         {page === 'home' && (
              <div className="space-y-8">
@@ -543,7 +564,7 @@ const App: React.FC = () => {
                      </p>
                      <QuestionForm 
                          onSubmit={handleAiQuestionSubmit}
-                         currentStudentYear={studentYear}
+                         currentStudentYear={selectedYears.length === 1 ? selectedYears[0] : "All"}
                      />
                  </div>
                 <div className="relative bg-white p-6 pr-20 rounded-lg shadow-md">
@@ -587,7 +608,7 @@ const App: React.FC = () => {
             likedCommentIds={likedCommentIds}
             onToggleCommentLike={handleToggleCommentLike}
             onLoadComments={loadCommentsForQuestion}
-            selectedYear={studentYear}
+            selectedYear={selectedYears.length === 1 ? selectedYears[0] : "All"}
           />
         )}
 
@@ -604,12 +625,16 @@ const App: React.FC = () => {
             likedCommentIds={likedCommentIds}
             onToggleCommentLike={handleToggleCommentLike}
             onLoadComments={loadCommentsForQuestion}
-            selectedYear={studentYear}
+            selectedYear={selectedYears.length === 1 ? selectedYears[0] : "All"}
           />
         )}
         {page === 'account' && (
-          <Account onOpenQuestion={openQuestionInForum} postAnonymously={postAnonymously}
-            setPostAnonymously={setPostAnonymously}/>
+          <Account onOpenQuestion={openQuestionInForum} 
+            postAnonymously={postAnonymously}
+            setPostAnonymously={setPostAnonymously}  
+            selectedYears={selectedYears} 
+            setSelectedYears={setSelectedYears}
+            />
         )} {page === 'terms' && <TermsPage onBack={() => setPage('home')} />}
       </main>
     </div>

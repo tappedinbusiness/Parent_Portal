@@ -61,7 +61,7 @@ export default async function handler(req: any, res: any) {
 
       const { data, error } = await supabase
         .from("comments")
-        .select("id, question_id, clerk_user_id, text, created_at, upvotes")
+        .select("id, question_id, clerk_user_id, text, created_at, upvotes, is_anonymous")
         .eq("question_id", questionId)
         .order("created_at", { ascending: true });
 
@@ -79,21 +79,14 @@ export default async function handler(req: any, res: any) {
       if (userIds.length > 0) {
         const { data: usersData, error: usersErr } = await supabase
           .from("users")
-          .select("clerk_user_id, first_name, last_name, avatar_url, post_anonymously")
+          .select("clerk_user_id, first_name, last_name, avatar_url")
           .in("clerk_user_id", userIds);
-
-        const isAnon = (u: any) => u.post_anonymously ?? false;
-
-
-        //LAST LEFT OFF HERE!!!!
-        //NEXT STEP IS Step (E) in ChatGPT instructions
 
         if (!usersErr && usersData) {
           userMap = Object.fromEntries(
             usersData.map((u: any) => [
               u.clerk_user_id,
-              { name: isAnon ? "Anonymous" : buildName(u.first_name, u.last_name),
-                avatar_url: isAnon ? null : u.avatar_url ?? null },
+              { name: buildName(u.first_name, u.last_name), avatar_url: u.avatar_url ?? null },
             ])
           );
         }
@@ -101,6 +94,7 @@ export default async function handler(req: any, res: any) {
 
       const comments = (data ?? []).map((row: any) => {
         const profile = row.clerk_user_id ? userMap[row.clerk_user_id] : null;
+        const isAnonRow = !!row.is_anonymous;
 
         return {
           id: String(row.id),
@@ -108,8 +102,9 @@ export default async function handler(req: any, res: any) {
           timestamp: row.created_at ? new Date(row.created_at) : new Date(),
           upvotes: row.upvotes ?? 0,
           userId: row.clerk_user_id ? String(row.clerk_user_id) : "anonymous",
-          authorName: row.clerk_user_id ? (profile?.name ?? "User") : "Anonymous",
-          authorAvatarUrl: row.clerk_user_id ? (profile?.avatar_url ?? null) : null,
+          isAnonymous: isAnonRow,
+          authorName: isAnonRow ? "Anonymous" : (profile?.name ?? "User"),
+          authorAvatarUrl: isAnonRow ? null : (profile?.avatar_url ?? null),
         };
       });
 
@@ -137,7 +132,6 @@ export default async function handler(req: any, res: any) {
         return;
       }
 
-      // Lookup author profile (best-effort)
       let authorName = "User";
       let authorAvatarUrl: string | null = null;
 
@@ -149,8 +143,8 @@ export default async function handler(req: any, res: any) {
 
       const isAnonymous = (userRow as any)?.post_anonymously ?? false;
 
-      authorName = isAnonymous ? "Anonymous" : buildName(userRow.first_name, userRow.last_name);
-      authorAvatarUrl = isAnonymous ? null : (userRow.avatar_url ?? null);
+      authorName = isAnonymous ? "Anonymous" : buildName(userRow?.first_name, userRow?.last_name);
+      authorAvatarUrl = isAnonymous ? null : (userRow?.avatar_url ?? null);
 
       const { data: inserted, error: insertErr } = await supabase
         .from("comments")
@@ -160,7 +154,7 @@ export default async function handler(req: any, res: any) {
           text: text.trim(),
           is_anonymous: isAnonymous,
         })
-        .select("id, question_id, clerk_user_id, text, created_at, upvotes")
+        .select("id, question_id, clerk_user_id, text, created_at, upvotes, is_anonymous")
         .single();
 
       if (insertErr) {
@@ -175,6 +169,7 @@ export default async function handler(req: any, res: any) {
           timestamp: inserted.created_at ? new Date(inserted.created_at) : new Date(),
           upvotes: inserted.upvotes ?? 0,
           userId: inserted.clerk_user_id ? String(inserted.clerk_user_id) : "anonymous",
+          isAnonymous: !!inserted.is_anonymous,
           authorName,
           authorAvatarUrl,
         },

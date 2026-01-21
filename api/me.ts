@@ -46,11 +46,11 @@ export default async function handler(req: any, res: any) {
 
     const clerkUserId = await requireClerkUserId(req);
 
-    const { studentYear } = req.body ?? {};
-    const safeStudentYear =
-      typeof studentYear === "string" && studentYear.trim().length > 0
-        ? studentYear.trim()
-        : "All";
+    const { studentYears } = req.body ?? {};
+    const safeStudentYears =
+      Array.isArray(studentYears)
+      ? studentYears.filter((s: any) => typeof s === "string" && s.trim().length > 0)
+      : [];
 
     const supabase = createClient(
       getEnv("SUPABASE_URL"),
@@ -73,13 +73,13 @@ export default async function handler(req: any, res: any) {
       last_name: lastName,
       avatar_url: avatarUrl,
       email,
-      student_year: safeStudentYear,
+      student_years: safeStudentYears,
     };
 
     const { data, error } = await supabase
       .from("users")
       .upsert(payload, { onConflict: "clerk_user_id" })
-      .select("id, clerk_user_id, first_name, last_name, avatar_url, student_year, post_anonymously")
+      .select("id, clerk_user_id, first_name, last_name, avatar_url, student_years, post_anonymously")
       .single();
 
     if (error) {

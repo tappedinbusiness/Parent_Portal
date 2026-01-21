@@ -188,7 +188,7 @@ const ForumItem: React.FC<{ question: Question;
 
           <p className="font-semibold text-green-900">A: (UA AI Assistant)</p>
           <div 
-            className="prose prose-sm max-w-none text-gray-800 ml-4 prose-a:text-blue-600 hover:prose-a:text-blue-800 hover:prose-a:underline"
+            className="prose prose-sm max-w-none text-gray-800 ml-4 prose-a:text-blue-600 prose-a:underline hover:prose-a:text-blue-800 visited:prose-a:text-blue-700"
             dangerouslySetInnerHTML={{ __html: htmlAnswer }}
           />
         </div>

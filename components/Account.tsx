@@ -1,14 +1,18 @@
 import React from 'react';
 import { SignedIn, SignedOut, SignInButton, useUser, SignOutButton, useAuth } from '@clerk/clerk-react';
 import type { Question } from '../types';
+import StudentYearSelect from './StudentYearSelect';
+import type { StudentYear } from '../types';
 
 interface AccountProps {
   onOpenQuestion: (q: Question) => void;
   postAnonymously: boolean;
   setPostAnonymously: (value: boolean) => void;
+  selectedYears: StudentYear[];
+  setSelectedYears: (value: StudentYear[]) => void;
 }
 
-const Account: React.FC<AccountProps> = ({ onOpenQuestion, postAnonymously, setPostAnonymously}) => {
+const Account: React.FC<AccountProps> = ({ onOpenQuestion, postAnonymously, setPostAnonymously, selectedYears, setSelectedYears}) => {
 
   const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
@@ -19,11 +23,64 @@ const Account: React.FC<AccountProps> = ({ onOpenQuestion, postAnonymously, setP
   const [bookmarks, setBookmarks] = React.useState<Question[]>([]);
   const [error, setError] = React.useState<string | null>(null);
 
-  //const [postAnonymously, setPostAnonymously] = React.useState<boolean>(false);
+  const [draftAnon, setDraftAnon] = React.useState(postAnonymously);
+  const [draftYears, setDraftYears] = React.useState<StudentYear[]>(selectedYears);
+  const [saving, setSaving] = React.useState(false);
+  const [saveMsg, setSaveMsg] = React.useState<string | null>(null);
+
+  // Keep drafts in sync if App state changes (ex: login/logout)
+  React.useEffect(() => setDraftAnon(postAnonymously), [postAnonymously]);
+  React.useEffect(() => setDraftYears(selectedYears), [selectedYears]);
 
   React.useEffect(() => {
 
   }, []);
+
+    const hasChanges =
+    draftAnon !== postAnonymously ||
+    JSON.stringify(draftYears) !== JSON.stringify(selectedYears);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setSaveMsg(null);
+
+      const token = await getToken();
+      if (!token) {
+        setSaveMsg("Please sign in again.");
+        return;
+      }
+
+      const res = await fetch('/api/me/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          postAnonymously: draftAnon,
+          studentYears: draftYears,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Save settings failed:", data);
+        setSaveMsg("Failed to save. Please try again.");
+        return;
+      }
+
+      // Update global app state AFTER server says OK
+      setPostAnonymously(!!data.postAnonymously);
+      setSelectedYears((data.studentYears ?? []) as StudentYear[]);
+      setSaveMsg("Saved.");
+    } catch (e) {
+      console.error(e);
+      setSaveMsg("Failed to save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleAnonToggle = async (checked: boolean) => {
     try {
@@ -187,20 +244,46 @@ const Account: React.FC<AccountProps> = ({ onOpenQuestion, postAnonymously, setP
           </div>
         )}
 
+        {/* Settings */}
         <div className="mt-6 p-4 border rounded-lg bg-white">
-          <div className="text-lg font-semibold text-gray-800 mb-1">Posting privacy</div>
-            <div className="text-sm text-gray-600 mb-3">
-            When enabled, your discussions and comments will show as Anonymous.
-            </div>
+          <div className="text-lg font-semibold text-gray-800 mb-1">Posting Privacy</div>
+          <div className="text-sm text-gray-600 mb-3">
+            When enabled, your discussions and comments will appear as <strong>Anonymous</strong>.
+          </div>
 
-            <label className="flex items-center gap-2 text-sm text-gray-800">
+          <label className="flex items-center gap-2 text-sm text-gray-800">
             <input
-            type="checkbox"
-            checked={postAnonymously}
-            onChange={(e) => handleAnonToggle(e.target.checked)}
+              type="checkbox"
+              checked={draftAnon}
+              onChange={(e) => setDraftAnon(e.target.checked)}
+              className="accent-red-700"
             />
             Post and comment anonymously
           </label>
+        </div>
+
+        <div className="mt-6 p-4 border rounded-lg bg-white">
+          <div className="text-lg font-semibold text-gray-800 mb-1">Student Year Preferences</div>
+          <div className="text-sm text-gray-600 mb-3">
+            This affects what appears in your “Top Posts” sections.
+          </div>
+
+          <StudentYearSelect value={draftYears} onChange={setDraftYears} includeAll={true} />
+        </div>
+
+        <div className="mt-6 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!hasChanges || saving}
+            className={`px-4 py-2 rounded-md text-white ${
+              !hasChanges || saving ? 'bg-gray-400' : 'bg-red-800 hover:bg-red-900'
+            }`}
+          >
+            {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+
+          {saveMsg && <div className="text-sm text-gray-600">{saveMsg}</div>}
         </div>
 
         <div className="mb-4 flex items-center justify-between">
