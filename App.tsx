@@ -4,38 +4,103 @@ import type { Question, StudentYear, Comment } from './types';
 import Header from './components/Header';
 import QuestionForm from './components/QuestionForm';
 import DiscussionForm from './components/DiscussionForm';
-import ForumDisplay from './components/ForumDisplay';
 import StudentYearSelect from './components/StudentYearSelect';
 import Account from './components/Account';
-import ForumFilter from './components/ForumFilter';
 import { v4 as uuidv4 } from 'uuid';
 import alabamaLogo from './assets/Alabama_Crimson_Tide_logo.svg.png';
 import groupIcon from './assets/group-of-people-svgrepo-com.svg';
 import { useAuth } from '@clerk/clerk-react';
+import HomeFooter from './components/HomeFooter';
+import TermsPage from './components/TermsPage';
 
-type Page = 'home' | 'forum' | 'account';
+import ForumAiPage from './components/ForumAiPage';
+import ForumDiscussionPage from './components/ForumDiscussionPage';
+
 type ForumView = 'discussion' | 'ai';
 
 const App: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
 
-  const [page, setPage] = useState<Page>('home');
-  const [studentYear, setStudentYear] = useState<StudentYear | 'All'>('All');
+  const [page, setPage] = useState<'home' | 'forum_ai' | 'forum_discussion' | 'account' | 'terms'>('home');
+  //const [studentYear, setStudentYear] = useState<StudentYear | 'All'>('All');
+  const [selectedYears, setSelectedYears] = useState<StudentYear[]>([]);
+
   const [pinnedQuestionIds, setPinnedQuestionIds] = useState<string[]>([]);
-  const [forumViewFilter, setForumViewFilter] = useState<ForumView>('discussion');
   const [likedQuestionIds, setLikedQuestionIds] = useState<string[]>([]);
   const [likedCommentIds, setLikedCommentIds] = useState<string[]>([]);
-  const [featuredQuestion, setFeaturedQuestion] = useState<Question | null>(null);
+
+  //const [featuredQuestion, setFeaturedQuestion] = useState<Question | null>(null);
+  const [featuredAiQuestion, setFeaturedAiQuestion] = useState<Question | null>(null);
+  const [selectedDiscussion, setSelectedDiscussion] = useState<Question | null>(null);
+
+  const [postAnonymously, setPostAnonymously] = useState(false);
+
+  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
 
   const { isSignedIn, getToken } = useAuth();
 
-  useEffect(() => {
-    loadAiQuestionsFromDb();
-  }, []);
+  const activeForumType: ForumView | null =
+  page === 'forum_ai' ? 'ai' :
+  page === 'forum_discussion' ? 'discussion' :
+  null;
 
-  const loadAiQuestionsFromDb = async () => {
+  useEffect(() => {
+  if (page === "forum_ai") {
+    loadQuestionsFromDb('ai');
+  } 
+  if (page === "forum_discussion") {
+    loadQuestionsFromDb('discussion');
+  }
+  loadMyBookmarks();
+  }, [page, isSignedIn]);
+
+  useEffect(() => {
+    const syncUser = async () => {
+      if (!isSignedIn) return;
+
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch("/api/me", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ studentYears: selectedYears }),
+      });
+
+      const data = await res.json();
+
+      console.log(data);
+
+      setPostAnonymously(!!data.user?.post_anonymously);
+      if (selectedYears.length === 0) {
+        setSelectedYears(data.user?.studentYears ?? []);
+      }
+
+      if (!res.ok) {
+        console.error("Failed to sync user:", data);
+        return;
+      }
+    };
+    syncUser();
+  }, [isSignedIn]);
+
+  const openQuestionInForum = (q: Question) => {
+    if (q.type === 'ai') {
+      setFeaturedAiQuestion(q);
+      setPage('forum_ai');
+    } else {
+      setSelectedDiscussion(q);
+      setPage('forum_discussion');
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const loadQuestionsFromDb = async (type: "ai" | "discussion") => {
     try {
-      const res = await fetch("/api/questions?type=ai&limit=50");
+      const res = await fetch(`/api/questions?type=${encodeURIComponent(type)}&limit=50`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -43,13 +108,34 @@ const App: React.FC = () => {
         return;
       }
 
-      // data.questions will match your Question shape (timestamp is a Date already)
       setQuestions(data.questions);
     } catch (err) {
       console.error("Failed to load questions:", err);
     }
   };
 
+  const loadMyBookmarks = async () => {
+    try {
+      if (!isSignedIn) {
+        setBookmarkedIds([]);
+        return;
+      }
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch("/api/bookmarks?limit=200", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Failed to load bookmarks:", data);
+        return;
+      }
+      setBookmarkedIds((data.bookmarks ?? []).map((q: any) => q.id));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleAiQuestionSubmit = async (questionText: string): Promise<boolean> => {
     try {
@@ -60,7 +146,7 @@ const App: React.FC = () => {
       // New getAIAnswer expects an object (per the updated openaiService.ts)
       const aiResponse = await getAIAnswer({
         question: questionText,
-        studentYear,
+        studentYear: selectedYears.length === 1 ? selectedYears[0] : "All",
         token,
       });
 
@@ -86,6 +172,9 @@ const App: React.FC = () => {
       const alreadyInState = serverId
         ? questions.some((q) => q.id === serverId)
         : false;
+
+
+      const studentYear = selectedYears.length === 1 ? selectedYears[0] : "All";
 
       if (!alreadyInState) {
         const newQuestion: Question = {
@@ -116,19 +205,24 @@ const App: React.FC = () => {
         );
       }
 
-      setFeaturedQuestion((prev) => ({
+      setFeaturedAiQuestion((prev) => ({
         ...(prev ?? {}),
         id: localId,
+        userId: prev?.userId ?? (isSignedIn ? "signed-in" : "anonymous"),
+        type: "ai",
         questionText: questionText,
-        aiAnswer: aiResponse.answer || prev?.aiAnswer,
+        aiAnswer: aiResponse.answer || prev?.aiAnswer || "No response generated.",
         status: aiResponse.status,
         timestamp: new Date(),
+        upvotes: prev?.upvotes ?? 0,
+        comments: prev?.comments ?? [],
+        ...(studentYear !== "All" ? { studentYear } : {}),
       }));
 
-
       // Navigate to forum either way (new or duplicate)
-      setPage("forum");
-      setForumViewFilter("ai");
+      setSelectedDiscussion(null);
+
+      setPage("forum_ai");
       window.scrollTo({ top: 0, behavior: "smooth" });
 
       return true;
@@ -139,7 +233,6 @@ const App: React.FC = () => {
     }
   };
 
-
   const handleDiscussionSubmit = async (topic: string): Promise<boolean> => {
     try {
       const moderationResult = await moderateDiscussionTopic();
@@ -149,23 +242,41 @@ const App: React.FC = () => {
         return false;
       }
 
-      const newDiscussion: Question = {
-        id: uuidv4(),
-        userId: 'anonymous',
-        type: 'discussion',
-        questionText: topic,
-        timestamp: new Date(),
-        upvotes: 0,
-        comments: [],
-      };
-      
-      if (studentYear !== 'All') {
-          newDiscussion.studentYear = studentYear;
+      const token = isSignedIn ? await getToken() : null;
+
+      const res = await fetch("/api/questions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          type: "discussion",
+          topic,
+          studentYear: selectedYears.length === 1 ? selectedYears[0] : "All"
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Failed to submit discussion:", data);
+        alert("Failed to submit discussion.");
+        return false;
       }
 
-      setQuestions(prevQuestions => [newDiscussion, ...prevQuestions]);
-      setPage('forum');
-      setForumViewFilter('discussion');
+      const created = data.question as Question;
+
+      setSelectedDiscussion(created);
+
+      setFeaturedAiQuestion(null);
+
+      // Insert into local state so it shows instantly
+      setQuestions((prev) => [created, ...prev]);
+
+      setPage("forum_discussion");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
       return true;
     } catch (err) {
       console.error("Failed to submit discussion:", err);
@@ -174,107 +285,257 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAddComment = async (questionId: string, commentText: string) => {
+    try{
+      if(!isSignedIn){
+        alert("You must be signed in to add a comment.");
+        return;
+      }
 
-  // Toggle like for a question: add/remove from liked list and update upvote count
-  const handleToggleLike = (questionId: string) => {
-    setQuestions(prevQuestions =>
-      prevQuestions.map(q => {
-        if (q.id !== questionId) return q;
-        const isLiked = likedQuestionIds.includes(questionId);
-        const newUpvotes = isLiked ? Math.max(0, q.upvotes - 1) : q.upvotes + 1;
-        return { ...q, upvotes: newUpvotes };
-      })
-    );
+      const token = await getToken();
+      if(!token){
+        alert("Please sign in again.")
+        return;
+      }
 
-    setLikedQuestionIds(prev =>
-      prev.includes(questionId) ? prev.filter(id => id !== questionId) : [...prev, questionId]
-    );
+      const res = await fetch("/api/comments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ questionId, text: commentText }),
+      });
+
+      const data = await res.json();
+
+      if(!res.ok){
+        console.error("Failed to add comment:", data);
+        alert("Failed to add comment. Please try again.");
+        return;
+      }
+
+      const newComment: Comment = data.comment;
+      
+      setQuestions(prevQuestions =>
+        prevQuestions.map(q =>
+          q.id === questionId
+            ? { ...q, comments: [...q.comments, newComment] }
+            : q
+        )
+      );
+
+    } catch(err){      console.error("Failed to add comment:", err);
+      alert("An error occurred while adding your comment.");
+      return;
+    }
   };
 
-  const handleAddComment = (questionId: string, commentText: string) => {
-    const newComment: Comment = {
-      id: uuidv4(),
-      text: commentText,
-      timestamp: new Date(),
-      upvotes: 0
-    };
+  const loadCommentsForQuestion = async (questionId: string) => {
+    try {
+      const res = await fetch(`/api/comments?questionId=${encodeURIComponent(questionId)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Failed to load comments:", data);
+        return;
+      }
 
-    setQuestions(prevQuestions =>
-      prevQuestions.map(q =>
-        q.id === questionId
-          ? { ...q, comments: [...q.comments, newComment] }
-          : q
-      )
-    );
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === questionId ? { ...q, comments: data.comments } : q))
+      );
+
+      setFeaturedAiQuestion((prev) =>
+        prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+      );
+
+      setSelectedDiscussion((prev) =>
+        prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+      );
+
+    } catch (err) {
+      console.error("Failed to load comments:", err);
+    }
   };
 
-  // Toggle like for a comment
-  const handleToggleCommentLike = (commentId: string, questionId: string) => {
-    setQuestions(prevQuestions =>
-      prevQuestions.map(q => {
-        if (q.id !== questionId) return q;
-        return {
-          ...q,
-          comments: q.comments.map(c => {
-            if (c.id !== commentId) return c;
-            const isLiked = likedCommentIds.includes(commentId);
-            const newUpvotes = isLiked ? Math.max(0, (c.upvotes || 0) - 1) : (c.upvotes || 0) + 1;
-            return { ...c, upvotes: newUpvotes };
-          })
-        };
-      })
-    );
+  const handleToggleLike = async (questionId: string) => {
+    try {
+      if (!isSignedIn) {
+        alert("Please sign in to like posts.");
+        return;
+      }
+      const token = await getToken();
+      if (!token) return;
 
-    setLikedCommentIds(prev => prev.includes(commentId) ? prev.filter(id => id !== commentId) : [...prev, commentId]);
+      const res = await fetch("/api/likes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetType: "question", targetId: questionId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Like failed:", data);
+        return;
+      }
+
+      // Update local likedIds + upvote count
+      setLikedQuestionIds((prev) =>
+        data.liked ? [...prev, questionId] : prev.filter((id) => id !== questionId)
+      );
+
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === questionId ? { ...q, upvotes: data.upvotes } : q))
+      );
+
+      setFeaturedAiQuestion((prev) =>
+        prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+      );
+
+      setSelectedDiscussion((prev) =>
+        prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleCommentLike = async (commentId: string, questionId: string) => {
+    try {
+      if (!isSignedIn) {
+        alert("Please sign in to like comments.");
+        return;
+      }
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch("/api/likes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetType: "comment", targetId: commentId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Comment like failed:", data);
+        return;
+      }
+
+      setLikedCommentIds((prev) =>
+        data.liked ? [...prev, commentId] : prev.filter((id) => id !== commentId)
+      );
+
+      // update comment upvotes inside the question’s comments
+      const updateQuestionComments = (q: any) => ({
+        ...q,
+        comments: (q.comments ?? []).map((c: any) =>
+          c.id === commentId ? { ...c, upvotes: data.upvotes } : c
+        ),
+      });
+
+      setQuestions((prev) => prev.map((q) => (q.id === questionId ? updateQuestionComments(q) : q)));
+      setFeaturedAiQuestion((prev) =>
+          prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+        );
+
+        setSelectedDiscussion((prev) =>
+          prev && prev.id === questionId ? { ...prev, comments: data.comments } : prev
+        );
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleBookmark = async (questionId: string) => {
+    try {
+      if (!isSignedIn) {
+        alert("Please sign in to bookmark posts.");
+        return;
+      }
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch("/api/bookmarks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ questionId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Bookmark toggle failed:", data);
+        return;
+      }
+
+      setBookmarkedIds((prev) =>
+        data.bookmarked ? [...prev, questionId] : prev.filter((id) => id !== questionId)
+      );
+    } catch (e) {
+      console.error(e);
+    }
   };
   
-  const pinnedQuestions = useMemo(() => {
-    return pinnedQuestionIds
-      .map(id => questions.find(q => q.id === id))
-      .filter((q): q is Question => !!q)
-      .filter(q => q.type === forumViewFilter);
-  }, [questions, pinnedQuestionIds, forumViewFilter]);
-
   const { yearSpecificQuestions, allQuestions } = useMemo(() => {
-    const sorted = [...questions]
-        .filter(q => !pinnedQuestionIds.includes(q.id))
-        .filter(q => q.type === forumViewFilter)
-        .sort((a, b) => {
-          // sort by upvotes desc, then by timestamp desc
-          if ((b.upvotes || 0) !== (a.upvotes || 0)) return (b.upvotes || 0) - (a.upvotes || 0);
-          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-        });
+    const base = [...questions].filter(q => !pinnedQuestionIds.includes(q.id));
+
+    const filteredByPage =
+      activeForumType ? base.filter(q => q.type === activeForumType) : base;
+
+    const sorted = filteredByPage.sort((a, b) => {
+      if ((b.upvotes || 0) !== (a.upvotes || 0)) return (b.upvotes || 0) - (a.upvotes || 0);
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+
+    const studentYear = selectedYears.length === 1 ? selectedYears[0] : "All";
 
     if (studentYear === 'All') {
-        return { yearSpecificQuestions: [], allQuestions: sorted };
+      return { yearSpecificQuestions: [], allQuestions: sorted };
     }
-    
+
     const yearQuestions = sorted.filter(q => q.studentYear === studentYear);
     const top15 = yearQuestions.slice(0, 15);
-    
-    return { yearSpecificQuestions: top15, allQuestions: sorted };
-  }, [questions, studentYear, pinnedQuestionIds, forumViewFilter]);
 
+    return { yearSpecificQuestions: top15, allQuestions: sorted };
+  }, [questions, selectedYears, pinnedQuestionIds, activeForumType]);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       <Header currentPage={page} setPage={setPage} />
       <main className="container mx-auto p-4 md:p-8 max-w-4xl">
-        {page !== 'account' && (
+          {page !== 'account' && isSignedIn && (
           <div className="mb-6">
-              <label htmlFor="global-student-year" className="block text-sm font-medium text-gray-700 mb-1">
-                  My Student's Year:
-              </label>
-              <div className="max-w-xs">
-                  <StudentYearSelect
-                      id="global-student-year"
-                      value={studentYear}
-                      onChange={setStudentYear}
-                      includeAll={true}
-                  />
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="text-sm font-semibold text-gray-800 mb-1">
+                My Student’s Year Preferences
               </div>
+
+              <div className="text-sm text-gray-700">
+                {selectedYears.length === 0 ? (
+                  <span>All Years</span>
+                ) : (
+                  <span>{selectedYears.join(', ')}</span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPage('account')}
+                className="mt-2 text-xs text-red-800 hover:underline"
+              >
+                To change these settings, head over to your account.
+              </button>
+            </div>
           </div>
         )}
+
 
         {page === 'home' && (
              <div className="space-y-8">
@@ -303,7 +564,7 @@ const App: React.FC = () => {
                      </p>
                      <QuestionForm 
                          onSubmit={handleAiQuestionSubmit}
-                         currentStudentYear={studentYear}
+                         currentStudentYear={selectedYears.length === 1 ? selectedYears[0] : "All"}
                      />
                  </div>
                 <div className="relative bg-white p-6 pr-20 rounded-lg shadow-md">
@@ -327,36 +588,54 @@ const App: React.FC = () => {
                     </div>
                     <h2 className="text-2xl font-bold text-gray-800 mb-2">Start a Discussion</h2>
                     <p className="text-gray-600 mb-4">
-                        Crowd-source real reviews, thoughts, and experiences from other parents on the platform. Discussions are community opinions and personal stories.
-
+                        Crowd-source real reviews, thoughts, and experiences from other parents on the platform. Discussions are community opinions and personal stories. To discover what other parents are saying, visit the Discussions page.
                     </p>
                     <DiscussionForm onSubmit={handleDiscussionSubmit} />
                 </div>
+                <HomeFooter onOpenTerms={() => setPage('terms')} />
              </div>
         )}
-        {page === 'forum' && (
-          <>
-            <ForumFilter 
-              currentView={forumViewFilter}
-              onViewChange={setForumViewFilter}
-            />
-            <ForumDisplay 
-                featuredQuestion={featuredQuestion}
-                yearSpecificQuestions={yearSpecificQuestions}
-                allQuestions={allQuestions}
-                onToggleLike={handleToggleLike}
-                likedIds={likedQuestionIds}
-                likedCommentIds={likedCommentIds}
-                onToggleCommentLike={handleToggleCommentLike}
-                onAddComment={handleAddComment}
-                selectedYear={studentYear}
-                currentView={forumViewFilter}
-            />
-          </>
+        {page === 'forum_ai' && (
+          <ForumAiPage
+            featuredQuestion={featuredAiQuestion}
+            yearSpecificQuestions={yearSpecificQuestions}
+            allQuestions={allQuestions}
+            onToggleLike={handleToggleLike}
+            onAddComment={handleAddComment}
+            onToggleBookmark={handleToggleBookmark}
+            bookmarkedIds={bookmarkedIds}
+            likedIds={likedQuestionIds}
+            likedCommentIds={likedCommentIds}
+            onToggleCommentLike={handleToggleCommentLike}
+            onLoadComments={loadCommentsForQuestion}
+            selectedYear={selectedYears.length === 1 ? selectedYears[0] : "All"}
+          />
+        )}
+
+        {page === 'forum_discussion' && (
+          <ForumDiscussionPage
+            featuredQuestion={selectedDiscussion}
+            yearSpecificQuestions={yearSpecificQuestions}
+            allQuestions={allQuestions}
+            onToggleLike={handleToggleLike}
+            onAddComment={handleAddComment}
+            onToggleBookmark={handleToggleBookmark}
+            bookmarkedIds={bookmarkedIds}
+            likedIds={likedQuestionIds}
+            likedCommentIds={likedCommentIds}
+            onToggleCommentLike={handleToggleCommentLike}
+            onLoadComments={loadCommentsForQuestion}
+            selectedYear={selectedYears.length === 1 ? selectedYears[0] : "All"}
+          />
         )}
         {page === 'account' && (
-          <Account />
-        )}
+          <Account onOpenQuestion={openQuestionInForum} 
+            postAnonymously={postAnonymously}
+            setPostAnonymously={setPostAnonymously}  
+            selectedYears={selectedYears} 
+            setSelectedYears={setSelectedYears}
+            />
+        )} {page === 'terms' && <TermsPage onBack={() => setPage('home')} />}
       </main>
     </div>
   );

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { verifyToken } from "@clerk/backend";
 
 function getEnv(name: string): string {
   const v = process.env[name];
@@ -12,67 +13,151 @@ function clampInt(value: any, min: number, max: number, fallback: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function getBearerToken(req: any): string | null {
+  const auth = req.headers?.authorization || req.headers?.Authorization;
+  if (!auth || typeof auth !== "string") return null;
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  return m ? m[1] : null;
+}
+
+async function getOptionalClerkUserId(req: any): Promise<string | null> {
+  const token = getBearerToken(req);
+  if (!token) return null;
+
+  const clerkSecret = process.env.CLERK_SECRET_KEY;
+  if (!clerkSecret) return null;
+
+  const authorizedPartiesRaw = process.env.CLERK_AUTHORIZED_PARTIES;
+  const authorizedParties = authorizedPartiesRaw
+    ? authorizedPartiesRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
+
+  try {
+    const verified = await verifyToken(token, {
+      secretKey: clerkSecret,
+      authorizedParties,
+    });
+    const sub = (verified as any)?.sub;
+    return typeof sub === "string" ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req: any, res: any) {
   try {
-    if (req.method !== "GET") {
-      res.status(405).json({ error: "Method not allowed" });
-      return;
-    }
-
-    const type = (req.query?.type ?? "ai") as string;
-    const limit = clampInt(req.query?.limit, 1, 200, 50);
-
     const supabase = createClient(
       getEnv("SUPABASE_URL"),
       getEnv("SUPABASE_SERVICE_ROLE_KEY"),
       { auth: { persistSession: false } }
     );
 
-    // You can expand this later (filters, search, paging).
-    // For now: get latest AI questions that were answered.
-    const { data, error } = await supabase
-      .from("questions")
-      .select(
-        "id, clerk_user_id, type, question_text, ai_answer, status, student_year, created_at"
-      )
-      .eq("type", type)
-      .order("created_at", { ascending: false })
-      .limit(limit);
+    // GET /api/questions?type=ai|discussion&limit=...
+    if (req.method === "GET") {
+      const type = (req.query?.type ?? "ai") as string;
+      const limit = clampInt(req.query?.limit, 1, 200, 50);
 
-    if (error) {
-      res.status(500).json({ error: "DB query failed", details: error.message });
+      const { data, error } = await supabase
+        .from("questions")
+        .select("id, clerk_user_id, type, question_text, ai_answer, status, student_year, created_at, upvotes")
+        .eq("type", type)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        res.status(500).json({ error: "DB query failed", details: error.message });
+        return;
+      }
+
+      const questions = (data ?? []).map((row: any) => ({
+        id: String(row.id),
+        userId: row.clerk_user_id ? String(row.clerk_user_id) : "anonymous",
+        type: row.type ?? "ai",
+        questionText: String(row.question_text ?? ""),
+        aiAnswer: row.ai_answer ?? undefined,
+        status: row.status ?? undefined,
+        timestamp: row.created_at ? new Date(row.created_at) : new Date(),
+        upvotes: row.upvotes ?? 0,
+        comments: [],
+        ...(row.student_year ? { studentYear: String(row.student_year) } : {}),
+      }));
+
+      res.status(200).json({ questions });
       return;
     }
 
-    const questions = (data ?? []).map((row: any) => ({
-      // Your UI expects a string id. Use the DB uuid.
-      id: String(row.id),
+    // POST /api/questions  body: { type: 'discussion', topic: string, studentYear?: string }
+    if (req.method === "POST") {
+      const { type, topic, studentYear } = req.body ?? {};
 
-      // Your UI currently uses userId. Keep it, but store something simple.
-      // If you later want usernames, we will add a users table join or separate lookup.
-      userId: row.clerk_user_id ? String(row.clerk_user_id) : "anonymous",
+      if (type !== "discussion") {
+        res.status(400).json({ error: "Invalid type (only 'discussion' allowed here)" });
+        return;
+      }
 
-      type: row.type ?? "ai",
-      questionText: String(row.question_text ?? ""),
-      aiAnswer: row.ai_answer ?? undefined,
-      status: row.status ?? undefined,
+      if (!topic || typeof topic !== "string" || topic.trim().length < 3) {
+        res.status(400).json({ error: "Invalid topic" });
+        return;
+      }
 
-      // Your UI expects Date object for timestamp.
-      timestamp: row.created_at ? new Date(row.created_at) : new Date(),
+      // Optional: attach clerk user id if signed in, otherwise anonymous
+      const clerkUserId = await getOptionalClerkUserId(req);
 
-      // You can wire these later.
-      upvotes: 0,
-      comments: [],
+      let isAnonymous = false;
 
-      // Keep this only when present
-      ...(row.student_year ? { studentYear: String(row.student_year) } : {}),
-    }));
+        // Check if user prefers to post anonymously
 
-    res.status(200).json({ questions });
+        const { data: userData } = await supabase
+          .from("users")
+          .select("post_anonymously, first_name, last_name, avatar_url, post_anonymously")
+          .eq("clerk_user_id", clerkUserId)
+          .single();
+        isAnonymous = userData?.post_anonymously ?? false;
+      
+      const insertPayload: any = {
+        type: "discussion",
+        clerk_user_id: clerkUserId,
+        student_year: studentYear ?? "All",
+        question_text: topic.trim(),
+        is_anonymous: isAnonymous,
+        status: null,
+        ai_answer: null,
+      };
+
+      const { data: inserted, error: insertErr } = await supabase
+        .from("questions")
+        .insert(insertPayload)
+        .select("id, clerk_user_id, type, question_text, student_year, created_at, is_anonymous")
+        .single();
+
+      if (insertErr) {
+        res.status(500).json({ error: "DB insert failed", details: insertErr.message });
+        return;
+      }
+
+      const authorName = isAnonymous ? "Anonymous" : `${userData?.first_name ?? ""} ${userData?.last_name ?? ""}`.trim() || "User";
+      const authorAvatarUrl = isAnonymous ? null : (userData?.avatar_url ?? null);
+
+      // Return in the same shape your UI expects
+      res.status(200).json({
+        question: {
+          id: String(inserted.id),
+          userId: inserted.clerk_user_id ? String(inserted.clerk_user_id) : "anonymous",
+          type: "discussion",
+          questionText: String(inserted.question_text ?? ""),
+          timestamp: inserted.created_at ? new Date(inserted.created_at) : new Date(),
+          upvotes: 0,
+          comments: [],
+          ...(inserted.student_year ? { studentYear: String(inserted.student_year) } : {}),
+          authorName,
+          authorAvatarUrl,
+        },
+      });
+      return;
+    }
+
+    res.status(405).json({ error: "Method not allowed" });
   } catch (err: any) {
-    res.status(500).json({
-      error: "Server error",
-      details: err?.message ?? String(err),
-    });
+    res.status(500).json({ error: "Server error", details: err?.message ?? String(err) });
   }
 }
